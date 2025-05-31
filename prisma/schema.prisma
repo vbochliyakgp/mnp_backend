@@ -11,361 +11,276 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User Management
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  password  String
-  firstName String?
-  lastName  String?
-  phone     String?
-  role      UserRole @default(USER)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String     @id @default(cuid())
+  name      String
+  email     String     @unique
+  role      UserRole
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   // Relations
-  sessions       Session[]
-  auditLogs      AuditLog[]
-  createdPanels  Panel[]           @relation("PanelCreator")
-  assignedPanels PanelAssignment[]
-  mnpRequests    MNPRequest[]
+  orders        Order[]
+  dispatches    Dispatch[]
+  auth          UserAuth?
+  refreshTokens RefreshToken[]
 
   @@map("users")
 }
 
-model Session {
-  id        String   @id @default(cuid())
-  sessionId String   @unique
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("sessions")
-}
-
-// Flow Control Panels
-model Panel {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  type        PanelType
-  config      Json // JSON configuration for panel settings
-  status      PanelStatus @default(ACTIVE)
-  priority    Int         @default(1)
-  createdById String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+model UserAuth {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  passwordHash     String
+  salt             String?
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Relations
-  createdBy   User              @relation("PanelCreator", fields: [createdById], references: [id])
-  assignments PanelAssignment[]
-  controls    Control[]
-  flows       Flow[]
-  metrics     PanelMetric[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("panels")
+  @@map("user_auth")
 }
 
-model PanelAssignment {
-  id         String   @id @default(cuid())
-  panelId    String
-  userId     String
-  canEdit    Boolean  @default(false)
-  canView    Boolean  @default(true)
-  assignedAt DateTime @default(now())
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  userAgent String?
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  panel Panel @relation(fields: [panelId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([panelId, userId])
-  @@map("panel_assignments")
+  @@map("refresh_tokens")
 }
 
-// Control Elements
-model Control {
-  id        String      @id @default(cuid())
-  panelId   String
+model RawMaterial {
+  id           String      @id @default(cuid())
+  itemId       String      @unique // e.g., MAT001, MAT002
+  name         String // e.g., PVC Material, Canvas Fabric
+  category     String      @default("Raw Material")
+  stock        Float // in sq m or kg
+  price        Float // per unit
+  status       StockStatus @default(IN_STOCK)
+  reorderLevel Float? // minimum stock level for alerts
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  productMaterials ProductMaterial[]
+
+  @@map("raw_materials")
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  itemId       String      @unique // e.g., PROD001
+  name         String // e.g., Heavy Duty Tarpaulin 20x30
+  category     String      @default("Finished Product")
+  stock        Int         @default(0)
+  price        Float // per unit
+  status       StockStatus @default(IN_STOCK)
+  isTopSelling Boolean     @default(false)
+  unitsSold    Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  materials   ProductMaterial[]
+  orderItems  OrderItem[]
+  productions ProductionBatch[]
+
+  @@map("products")
+}
+
+model ProductMaterial {
+  id            String @id @default(cuid())
+  productId     String
+  rawMaterialId String
+  quantity      Float // quantity of raw material needed per product unit
+
+  // Relations
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rawMaterial RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, rawMaterialId])
+  @@map("product_materials")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
   name      String
-  type      ControlType
-  position  Json // {x, y, width, height}
-  config    Json // Control-specific configuration
-  value     String? // Current value
-  isActive  Boolean     @default(true)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  email     String?
+  phone     String?
+  address   String?
+  company   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  panel Panel        @relation(fields: [panelId], references: [id], onDelete: Cascade)
-  logs  ControlLog[]
+  // Relations
+  orders Order[]
 
-  @@map("controls")
+  @@map("customers")
 }
 
-model ControlLog {
-  id        String   @id @default(cuid())
-  controlId String
-  oldValue  String?
-  newValue  String?
-  userId    String?
-  timestamp DateTime @default(now())
-  action    String // "UPDATED", "ACTIVATED", "DEACTIVATED"
+model Order {
+  id         String      @id @default(cuid())
+  orderId    String      @unique // e.g., ORD123, ORD124
+  customerId String
+  userId     String? // assigned user/sales person
+  date       DateTime    @default(now())
+  status     OrderStatus @default(PENDING)
+  total      Float
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
-  control Control @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  // Relations
+  customer   Customer          @relation(fields: [customerId], references: [id])
+  user       User?             @relation(fields: [userId], references: [id])
+  items      OrderItem[]
+  production ProductionBatch[]
+  dispatch   Dispatch?
 
-  @@map("control_logs")
+  @@map("orders")
 }
 
-// Flow Management
-model Flow {
-  id          String     @id @default(cuid())
-  panelId     String
-  name        String
-  description String?
-  flowData    Json // Flow definition (nodes, edges, etc.)
-  status      FlowStatus @default(DRAFT)
-  version     Int        @default(1)
-  isActive    Boolean    @default(false)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Float
+  total     Float
 
-  panel      Panel           @relation(fields: [panelId], references: [id], onDelete: Cascade)
-  executions FlowExecution[]
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 
-  @@map("flows")
+  @@map("order_items")
 }
 
-model FlowExecution {
-  id        String          @id @default(cuid())
-  flowId    String
-  status    ExecutionStatus
-  startTime DateTime        @default(now())
-  endTime   DateTime?
-  duration  Int? // Duration in milliseconds
-  input     Json?
-  output    Json?
-  errorMsg  String?
+model ProductionBatch {
+  id        String           @id @default(cuid())
+  batchId   String           @unique // e.g., HD2030-001, WC1525-002
+  orderId   String?
+  productId String
+  quantity  Int
+  status    ProductionStatus @default(PENDING)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  flow  Flow                @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  steps FlowExecutionStep[]
+  // Relations
+  order   Order?  @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 
-  @@map("flow_executions")
+  @@map("production_batches")
 }
 
-model FlowExecutionStep {
-  id          String          @id @default(cuid())
-  executionId String
-  stepName    String
-  status      ExecutionStatus
-  startTime   DateTime        @default(now())
-  endTime     DateTime?
-  duration    Int?
-  input       Json?
-  output      Json?
-  errorMsg    String?
+model Dispatch {
+  id         String         @id @default(cuid())
+  dispatchId String         @unique // e.g., DIS001, DIS002
+  orderId    String         @unique
+  userId     String? // dispatcher
+  customer   String
+  status     DispatchStatus @default(READY_FOR_PICKUP)
+  carrier    String? // e.g., FedEx, UPS, DHL
+  trackingId String?
+  date       DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
-  execution FlowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  // Relations
+  order Order @relation(fields: [orderId], references: [id])
+  user  User? @relation(fields: [userId], references: [id])
 
-  @@map("flow_execution_steps")
+  @@map("dispatches")
 }
 
-// MNP (Mobile Number Portability) Management
-model MNPRequest {
-  id                String          @id @default(cuid())
-  requestId         String          @unique
-  mobileNumber      String
-  currentOperator   String
-  requestedOperator String
-  customerName      String
-  customerEmail     String?
-  customerAddress   String?
-  idProof           String // Document type
-  idProofNumber     String
-  status            MNPStatus       @default(PENDING)
-  requestDate       DateTime        @default(now())
-  processedDate     DateTime?
-  completionDate    DateTime?
-  rejectionReason   String?
-  priority          RequestPriority @default(NORMAL)
-  createdById       String
-
-  createdBy User               @relation(fields: [createdById], references: [id])
-  history   MNPStatusHistory[]
-  documents MNPDocument[]
-
-  @@map("mnp_requests")
-}
-
-model MNPStatusHistory {
-  id         String    @id @default(cuid())
-  requestId  String
-  fromStatus MNPStatus
-  toStatus   MNPStatus
-  changedAt  DateTime  @default(now())
-  changedBy  String?
-  comments   String?
-
-  mnpRequest MNPRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-
-  @@map("mnp_status_history")
-}
-
-model MNPDocument {
-  id         String   @id @default(cuid())
-  requestId  String
-  fileName   String
-  fileType   String
-  fileSize   Int
-  filePath   String
-  uploadedAt DateTime @default(now())
-
-  mnpRequest MNPRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-
-  @@map("mnp_documents")
-}
-
-// Metrics and Analytics
-model PanelMetric {
-  id        String   @id @default(cuid())
-  panelId   String
-  metricKey String
-  value     Float
-  unit      String?
-  timestamp DateTime @default(now())
-
-  panel Panel @relation(fields: [panelId], references: [id], onDelete: Cascade)
-
-  @@map("panel_metrics")
-}
-
-// Notifications
-model Notification {
-  id        String               @id @default(cuid())
-  title     String
+model Alert {
+  id        String        @id @default(cuid())
+  type      AlertType
   message   String
-  type      NotificationType     @default(INFO)
-  priority  NotificationPriority @default(NORMAL)
-  isRead    Boolean              @default(false)
-  userId    String?
-  createdAt DateTime             @default(now())
-  readAt    DateTime?
+  severity  AlertSeverity @default(INFO)
+  isRead    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
-  @@map("notifications")
+  @@map("alerts")
 }
 
-// Audit Logging
-model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String?
-  action     String
-  resource   String // Table/Model name
-  resourceId String?
-  oldValues  Json?
-  newValues  Json?
-  ipAddress  String?
-  userAgent  String?
-  timestamp  DateTime @default(now())
-
-  user User? @relation(fields: [userId], references: [id])
-
-  @@map("audit_logs")
-}
-
-// Configuration
-model SystemConfig {
+model SystemSettings {
   id        String   @id @default(cuid())
   key       String   @unique
   value     String
-  dataType  String // "string", "number", "boolean", "json"
-  category  String?
-  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("system_config")
+  @@map("system_settings")
 }
 
 // Enums
 enum UserRole {
-  SUPER_ADMIN
   ADMIN
+  MANAGER
   OPERATOR
-  VIEWER
-  USER
+  SALES
 }
 
-enum PanelType {
-  CONTROL_PANEL
-  DASHBOARD
-  MONITORING
-  ANALYTICS
-  WORKFLOW
-}
-
-enum PanelStatus {
+enum UserStatus {
   ACTIVE
   INACTIVE
-  MAINTENANCE
-  ARCHIVED
 }
 
-enum ControlType {
-  BUTTON
-  SWITCH
-  SLIDER
-  INPUT
-  DISPLAY
-  CHART
-  GAUGE
-  LED
-  PROGRESS
+enum StockStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
 }
 
-enum FlowStatus {
-  DRAFT
-  ACTIVE
-  PAUSED
-  ARCHIVED
-  ERROR
-}
-
-enum ExecutionStatus {
+enum OrderStatus {
   PENDING
-  RUNNING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum MNPStatus {
-  PENDING
-  UNDER_REVIEW
-  APPROVED
   PROCESSING
+  IN_PRODUCTION
   COMPLETED
-  REJECTED
+  SHIPPED
+  DELIVERED
   CANCELLED
+  DELAYED
 }
 
-enum RequestPriority {
-  LOW
-  NORMAL
-  HIGH
-  URGENT
+enum ProductionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
 }
 
-enum NotificationType {
-  INFO
-  SUCCESS
-  WARNING
-  ERROR
+enum DispatchStatus {
+  READY_FOR_PICKUP
+  IN_TRANSIT
+  DELIVERED
+  DELAYED
+}
+
+enum AlertType {
+  STOCK_LOW
+  PRODUCTION_DELAY
+  ORDER_UPDATE
   SYSTEM
 }
 
-enum NotificationPriority {
-  LOW
-  NORMAL
-  HIGH
+enum AlertSeverity {
+  INFO
+  WARNING
+  ERROR
   CRITICAL
 }
