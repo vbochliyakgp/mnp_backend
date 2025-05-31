@@ -17,7 +17,7 @@ export const register = async (
   next: NextFunction
 ) => {
   try {
-    const { name, email, password, role = "OPERATOR" }: RegisterData = req.body;
+    const { name, email, password, role = "OPERATOR" } = req.body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -65,7 +65,7 @@ export const login = async (
   next: NextFunction
 ) => {
   try {
-    const { email, password }: LoginCredentials = req.body;
+    const { email, password } = req.body;
 
     // Find user with auth
     const user = await prisma.user.findUnique({
@@ -105,7 +105,7 @@ export const login = async (
     // Set refresh token as httpOnly cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
@@ -191,6 +191,6 @@ export const logout = async (
     return res.json({ message: "Logout successful" });
   } catch (error) {
     console.error("Logout error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

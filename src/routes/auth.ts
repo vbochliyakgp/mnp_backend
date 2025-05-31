@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, RequestHandler } from "express";
 import {
   register,
   login,
@@ -10,12 +10,12 @@ import { AuthRequest } from "../types";
 
 const router = Router();
 
-router.post("/register", register);
+router.post("/register", register as unknown as RequestHandler);
 
-router.post("/login", login);
+router.post("/login", login as unknown as RequestHandler);
 
-router.post("/refresh", refreshToken);
+router.post("/refresh", refreshToken as unknown as RequestHandler);
 
-router.post("/logout", authenticateToken, logout);
+router.post("/logout", authenticateToken, logout as unknown as RequestHandler);
 
 export default router;
