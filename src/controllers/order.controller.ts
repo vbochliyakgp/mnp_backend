@@ -168,29 +168,6 @@ export const getOrders = async (
   }
 };
 
-export const updateOrderStatus = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const { id } = req.params;
-    const { status, remarks } = req.body;
-
-    const order = await prisma.order.update({
-      where: { id },
-      data: {
-        status,
-        ...(remarks && { remarks }),
-      },
-    });
-
-    successResponse(res, 200, order, "Order status updated successfully");
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const getOrderBook = async (
   req: Request,
   res: Response,
@@ -258,6 +235,212 @@ export const getOrderBook = async (
         showing: orders.length,
       },
       "Order book data retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getOrderDetails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { orderId: id },
+      include: {
+        customer: true,
+        items: {
+          include: {
+            product: true,
+          },
+        },
+
+        dispatch: true,
+      },
+    });
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    // Format response to match UI
+    const response = {
+      orderId: order.orderId,
+      customer: {
+        name: order.customer.company || order.customer.name,
+        date: order.date.toISOString().split("T")[0],
+      },
+      status: order.status,
+      products: order.items.map((item) => ({
+        name: item.product.name,
+        length: item.length,
+        width: item.width,
+        quantity: item.quantity,
+        unit: item.unit,
+        colorTop: item.colorTop,
+        colorBottom: item.colorBottom,
+      })),
+
+      dispatch: order.dispatch,
+    };
+
+    successResponse(res, 200, response, "Order details retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateOrderStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      throw new ApiError(400, "Status is required");
+    }
+
+    const validStatuses = [
+      "PENDING",
+      "PROCESSING",
+      "IN_PRODUCTION",
+      "COMPLETED",
+      "DELAYED",
+    ];
+    if (!validStatuses.includes(status)) {
+      throw new ApiError(400, "Invalid status value");
+    }
+
+    const order = await prisma.order.update({
+      where: { orderId: id },
+      data: { status },
+      include: {
+        customer: true,
+      },
+    });
+
+    successResponse(
+      res,
+      200,
+      {
+        orderId: order.orderId,
+        status: order.status,
+        customer: order.customer.company || order.customer.name,
+      },
+      "Order status updated successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateOrderProducts = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { products } = req.body;
+
+    if (!products || !Array.isArray(products)) {
+      throw new ApiError(400, "Products array is required");
+    }
+
+    // Validate each product
+    for (const product of products) {
+      if (
+        !product.productId ||
+        !product.quantity ||
+        !product.length ||
+        !product.width
+      ) {
+        throw new ApiError(
+          400,
+          "Each product must have productId, quantity, length, and width"
+        );
+      }
+    }
+
+    // Transaction to update order items
+    const updatedOrder = await prisma.$transaction(async (prisma) => {
+      // Delete existing items
+      await prisma.orderItem.deleteMany({
+        where: { order: { orderId: id } },
+      });
+
+      // Get products to calculate prices
+      const productIds = products.map((p) => p.productId);
+      const productRecords = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+      });
+
+      // Create new items
+      const newItems = products.map((product) => {
+        const productRecord = productRecords.find(
+          (p) => p.id === product.productId
+        );
+        if (!productRecord) {
+          throw new ApiError(404, `Product not found: ${product.productId}`);
+        }
+
+        return {
+          productId: product.productId,
+          colorTop: product.colorTop,
+          colorBottom: product.colorBottom,
+          length: product.length,
+          width: product.width,
+          quantity: product.quantity,
+          unit: product.unit || "units",
+          unitPrice: productRecord.price,
+          total: productRecord.price * product.quantity,
+        };
+      });
+
+      // Calculate new total
+      const newTotal = newItems.reduce((sum, item) => sum + item.total, 0);
+
+      // Update order with new items and total
+      return await prisma.order.update({
+        where: { orderId: id },
+        data: {
+          total: newTotal,
+          items: {
+            create: newItems,
+          },
+        },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      });
+    });
+
+    successResponse(
+      res,
+      200,
+      {
+        orderId: updatedOrder.orderId,
+        products: updatedOrder.items.map((item) => ({
+          name: item.product.name,
+          quantity: item.quantity,
+          length: item.length,
+          width: item.width,
+          unit: item.unit,
+        })),
+      },
+      "Order products updated successfully"
     );
   } catch (error) {
     next(error);
