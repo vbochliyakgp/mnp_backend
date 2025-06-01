@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -17,48 +17,15 @@ model User {
   email     String     @unique
   role      UserRole
   status    UserStatus @default(ACTIVE)
+  lastLogin DateTime?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
   // Relations
-  orders        Order[]
-  dispatches    Dispatch[]
-  auth          UserAuth?
-  refreshTokens RefreshToken[]
+  orders     Order[]
+  dispatches Dispatch[]
 
   @@map("users")
-}
-
-model UserAuth {
-  id               String    @id @default(cuid())
-  userId           String    @unique
-  passwordHash     String
-  salt             String?
-  resetToken       String?   @unique
-  resetTokenExpiry DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_auth")
-}
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  userAgent String?
-  expiresAt DateTime
-  isRevoked Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("refresh_tokens")
 }
 
 model RawMaterial {

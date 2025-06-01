@@ -1,9 +1,9 @@
 {
   "name": "backend_flow",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "server.ts",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js"
   },
@@ -19,7 +19,8 @@
     "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.8",
