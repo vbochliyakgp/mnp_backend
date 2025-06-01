@@ -1,13 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import { prisma } from "../utils/prisma";
+import { PrismaClient } from "../../generated/prisma";
 import { ApiError } from "../utils/apiError";
 import { successResponse } from "../utils/apiResponse";
-import { v4 as uuidv4 } from "uuid";
 
-function generateUniqueId(): string {
-  // implementation to generate a unique ID
-  return uuidv4();
-}
+const prisma = new PrismaClient();
 
 export const createDispatch = async (
   req: Request,
@@ -15,72 +11,169 @@ export const createDispatch = async (
   next: NextFunction
 ) => {
   try {
-    const { orderId, userId, customer, carrier, trackingId } = req.body;
+    const {
+      orderId,
+      loadingDate,
+      driverName,
+      shippingAddress,
+      customer,
+      carNumber,
+      driverNumber,
+      carrier,
+      transportation,
+      packageDetails,
+      remarks,
+    } = req.body;
 
-    // Check if order exists and is completed
+    // Validate required fields
+    if (!orderId || !customer || !shippingAddress) {
+      throw new ApiError(
+        400,
+        "Order ID, customer, and shipping address are required"
+      );
+    }
+
+    // Check if order exists and is ready for dispatch
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
-      },
+      where: { orderId },
+      include: { dispatch: true },
     });
 
     if (!order) {
       throw new ApiError(404, "Order not found");
     }
-
-    if (order.status !== "COMPLETED") {
-      throw new ApiError(400, "Order must be completed before dispatch");
+    if (order.dispatch) {
+      throw new ApiError(400, "Order already has a dispatch record");
     }
 
-    // Check product availability
-    for (const item of order.items) {
-      if (item.product.stock < item.quantity) {
-        throw new ApiError(400, `Insufficient stock for ${item.product.name}`);
-      }
-    }
+    // Generate dispatch ID
+    const lastDispatch = await prisma.dispatch.findFirst({
+      orderBy: { dispatchId: "desc" },
+    });
+    const nextId = lastDispatch
+      ? parseInt(lastDispatch.dispatchId.replace("DIS", "")) + 1
+      : 1;
+    const dispatchId = `DIS${nextId.toString().padStart(3, "0")}`;
 
     // Create dispatch
     const dispatch = await prisma.dispatch.create({
       data: {
-        dispatchId: generateUniqueId(), // Generate a unique ID for the dispatch
-        order: {
-          connect: {
-            id: orderId,
-          },
-        },
-        userId,
+        dispatchId,
+        orderId: order.id,
         customer,
+        loadingDate: loadingDate ? new Date(loadingDate) : null,
+        driverName,
+        shippingAddress,
+        carNumber,
+        driverNumber,
         carrier,
-        trackingId,
-      },
+        transportation,
+        packageDetails,
+        remarks,
+        status: "READY_FOR_PICKUP",
+      } as any,
       include: {
         order: true,
-        user: true,
       },
     });
+
     // Update order status
     await prisma.order.update({
-      where: { id: orderId },
+      where: { id: order.id },
       data: { status: "SHIPPED" },
     });
 
-    // Update product stock
-    for (const item of order.items) {
-      await prisma.product.update({
-        where: { id: item.productId },
-        data: {
-          stock: { decrement: item.quantity },
-          unitsSold: { increment: item.quantity },
+    successResponse(res, 201, dispatch, "Dispatch created successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTodayDispatches = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [count, dispatches] = await Promise.all([
+      prisma.dispatch.count({
+        where: {
+          createdAt: { gte: todayStart },
         },
-      });
+      }),
+      prisma.dispatch.findMany({
+        where: {
+          createdAt: { gte: todayStart },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4, // Show 4 in the "Today's Dispatch Status" section
+      }),
+    ]);
+
+    successResponse(
+      res,
+      200,
+      {
+        todaysDispatches: count,
+        recentDispatches: dispatches,
+      },
+      "Today's dispatches retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllDispatches = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { status, search, page = 1, limit = 10 } = req.query;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (search) {
+      where.OR = [
+        { dispatchId: { contains: search as string } },
+        { order: { orderId: { contains: search as string } } },
+        { customer: { contains: search as string } },
+      ];
     }
 
-    successResponse(res, 201, dispatch, "Dispatch created successfully");
+    const [dispatches, total] = await Promise.all([
+      prisma.dispatch.findMany({
+        where,
+        include: {
+          order: {
+            select: { orderId: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.dispatch.count({ where }),
+    ]);
+
+    successResponse(
+      res,
+      200,
+      {
+        dispatches,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+      "Dispatches retrieved successfully"
+    );
   } catch (error) {
     next(error);
   }
@@ -93,54 +186,27 @@ export const updateDispatchStatus = async (
 ) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, trackingId, remarks } = req.body;
+
+    if (
+      !status ||
+      !["READY_FOR_PICKUP", "IN_TRANSIT", "DELIVERED", "DELAYED"].includes(
+        status
+      )
+    ) {
+      throw new ApiError(400, "Valid status is required");
+    }
 
     const dispatch = await prisma.dispatch.update({
       where: { id },
-      data: { status },
+      data: {
+        status,
+        ...(trackingId && { trackingId }),
+        ...(remarks && { remarks }),
+      },
     });
-
-    // If delivered, update order status
-    if (status === "DELIVERED") {
-      await prisma.order.update({
-        where: { id: dispatch.orderId },
-        data: { status: "DELIVERED" },
-      });
-    }
 
     successResponse(res, 200, dispatch, "Dispatch status updated successfully");
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getDispatches = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const { status } = req.query;
-
-    const where: any = {};
-    if (status) where.status = status;
-
-    const dispatches = await prisma.dispatch.findMany({
-      where,
-      include: {
-        order: {
-          include: {
-            customer: true,
-          },
-        },
-        user: true,
-      },
-      orderBy: {
-        date: "desc",
-      },
-    });
-
-    successResponse(res, 200, dispatches, "Dispatches retrieved successfully");
   } catch (error) {
     next(error);
   }

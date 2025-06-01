@@ -30,17 +30,19 @@ model User {
 
 model RawMaterial {
   id           String      @id @default(cuid())
-  itemId       String      @unique // e.g., MAT001, MAT002
-  name         String // e.g., PVC Material, Canvas Fabric
+  itemId       String      @unique
+  name         String
+  supplier     String?
   category     String      @default("Raw Material")
-  stock        Float // in sq m or kg
-  price        Float // per unit
+  stock        Float
+  unit         String      @default("kg")
+  price        Float
   status       StockStatus @default(IN_STOCK)
-  reorderLevel Float? // minimum stock level for alerts
+  reorderLevel Float?
+  remarks      String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  // Relations
   productMaterials ProductMaterial[]
 
   @@map("raw_materials")
@@ -48,18 +50,22 @@ model RawMaterial {
 
 model Product {
   id           String      @id @default(cuid())
-  itemId       String      @unique // e.g., PROD001
-  name         String // e.g., Heavy Duty Tarpaulin 20x30
+  itemId       String      @unique
+  name         String
+  type         String? // "rolls" or "bundles"
   category     String      @default("Finished Product")
   stock        Int         @default(0)
-  price        Float // per unit
+  unit         String      @default("units")
+  price        Float
+  width        Float?
+  length       Float? // length per roll/bundle
   status       StockStatus @default(IN_STOCK)
   isTopSelling Boolean     @default(false)
   unitsSold    Int         @default(0)
+  remarks      String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  // Relations
   materials   ProductMaterial[]
   orderItems  OrderItem[]
   productions ProductionBatch[]
@@ -98,33 +104,43 @@ model Customer {
 }
 
 model Order {
-  id         String      @id @default(cuid())
-  orderId    String      @unique // e.g., ORD123, ORD124
-  customerId String
-  userId     String? // assigned user/sales person
-  date       DateTime    @default(now())
-  status     OrderStatus @default(PENDING)
-  total      Float
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id             String      @id @default(cuid())
+  orderId        String      @unique
+  customerId     String
+  userId         String?
+  date           DateTime    @default(now())
+  status         OrderStatus @default(PENDING)
+  total          Float
+  salesProcess   String?
+  deliveryMethod String? // X-Amoney, FOR Delivery, Transport
+  carrier        String? // Transport company if selected
+  trackingId     String?
+  remarks        String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   // Relations
-  customer   Customer          @relation(fields: [customerId], references: [id])
-  user       User?             @relation(fields: [userId], references: [id])
-  items      OrderItem[]
-  production ProductionBatch[]
-  dispatch   Dispatch?
+  customer        Customer          @relation(fields: [customerId], references: [id])
+  user            User?             @relation(fields: [userId], references: [id])
+  items           OrderItem[]
+  dispatch        Dispatch?
+  ProductionBatch ProductionBatch[]
 
   @@map("orders")
 }
 
 model OrderItem {
-  id        String @id @default(cuid())
-  orderId   String
-  productId String
-  quantity  Int
-  unitPrice Float
-  total     Float
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  colorTop    String?
+  colorBottom String?
+  length      Float
+  width       Float
+  quantity    Int
+  unit        String
+  unitPrice   Float
+  total       Float
 
   // Relations
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -153,17 +169,24 @@ model ProductionBatch {
 }
 
 model Dispatch {
-  id         String         @id @default(cuid())
-  dispatchId String         @unique // e.g., DIS001, DIS002
-  orderId    String         @unique
-  userId     String? // dispatcher
-  customer   String
-  status     DispatchStatus @default(READY_FOR_PICKUP)
-  carrier    String? // e.g., FedEx, UPS, DHL
-  trackingId String?
-  date       DateTime       @default(now())
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  dispatchId      String         @unique
+  orderId         String         @unique
+  userId          String? // dispatcher
+  customer        String
+  status          DispatchStatus @default(READY_FOR_PICKUP)
+  loadingDate     DateTime?
+  driverName      String?
+  shippingAddress String?
+  carNumber       String?
+  driverNumber    String?
+  carrier         String? // e.g., FedEx, UPS
+  transportation  String? // Self pickup, Third-party logistics
+  trackingId      String?
+  packageDetails  String? // Weight, Dimensions
+  remarks         String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   // Relations
   order Order @relation(fields: [orderId], references: [id])

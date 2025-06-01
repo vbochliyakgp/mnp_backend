@@ -1,14 +1,18 @@
 import express from "express";
 import {
   getInventorySummary,
+  addRawMaterial,
+  addFinishedProduct,
+  generateInventoryReport,
   getLowStockAlerts,
-  getTopSellingProducts,
 } from "../controllers/inventory.controller";
 
 const router = express.Router();
 
 router.get("/summary", getInventorySummary);
 router.get("/alerts", getLowStockAlerts);
-router.get("/top-selling", getTopSellingProducts);
+router.post("/raw-materials", addRawMaterial);
+router.post("/finished-products", addFinishedProduct);
+router.get("/report", generateInventoryReport);
 
 export default router;
