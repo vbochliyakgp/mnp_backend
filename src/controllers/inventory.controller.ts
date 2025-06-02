@@ -197,3 +197,196 @@ export const getLowStockAlerts = async (
     next(error);
   }
 };
+
+export const getRawMaterials = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { search, status, page = 1, limit = 10 } = req.query;
+
+    const where: any = {
+      category: "Raw Material",
+    };
+
+    if (search) {
+      where.OR = [
+        { itemId: { contains: search as string, mode: "insensitive" } },
+        { name: { contains: search as string, mode: "insensitive" } },
+        { supplier: { contains: search as string, mode: "insensitive" } },
+      ];
+    }
+
+    if (status && status !== "All Statuses") {
+      where.status = status;
+    }
+
+    const [rawMaterials, totalCount] = await Promise.all([
+      prisma.rawMaterial.findMany({
+        where,
+        orderBy: { name: "asc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.rawMaterial.count({ where }),
+    ]);
+
+    successResponse(
+      res,
+      200,
+      {
+        rawMaterials,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Raw materials retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getFinishedProducts = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { search, status, page = 1, limit = 10 } = req.query;
+
+    const where: any = {
+      category: "Finished Product",
+    };
+
+    if (search) {
+      where.OR = [
+        { itemId: { contains: search as string, mode: "insensitive" } },
+        { name: { contains: search as string, mode: "insensitive" } },
+        { type: { contains: search as string, mode: "insensitive" } },
+      ];
+    }
+
+    if (status && status !== "All Statuses") {
+      where.status = status;
+    }
+
+    const [products, totalCount] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy: { name: "asc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    successResponse(
+      res,
+      200,
+      {
+        products,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Finished products retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const searchInventory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { query, category, status, page = 1, limit = 10 } = req.query;
+
+    if (!query) {
+      throw new ApiError(400, "Search query is required");
+    }
+
+    const where: any = {
+      OR: [
+        { itemId: { contains: query as string, mode: "insensitive" } },
+        { name: { contains: query as string, mode: "insensitive" } },
+        { supplier: { contains: query as string, mode: "insensitive" } },
+        { type: { contains: query as string, mode: "insensitive" } },
+      ],
+    };
+
+    if (category && category !== "All Categories") {
+      where.category = category;
+    }
+
+    if (status && status !== "All Statuses") {
+      where.status = status;
+    }
+
+    const [rawMaterials, products] = await Promise.all([
+      prisma.rawMaterial.findMany({
+        where: {
+          ...where,
+          category: "Raw Material",
+        },
+        orderBy: { name: "asc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.product.findMany({
+        where: {
+          ...where,
+          category: "Finished Product",
+        },
+        orderBy: { name: "asc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+    ]);
+
+    const totalCount = await Promise.all([
+      prisma.rawMaterial.count({
+        where: {
+          ...where,
+          category: "Raw Material",
+        },
+      }),
+      prisma.product.count({
+        where: {
+          ...where,
+          category: "Finished Product",
+        },
+      }),
+    ]);
+
+    const combinedTotal = totalCount.reduce((sum, count) => sum + count, 0);
+
+    successResponse(
+      res,
+      200,
+      {
+        rawMaterials,
+        products,
+        pagination: {
+          total: combinedTotal,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(combinedTotal / Number(limit)),
+        },
+      },
+      "Inventory search results"
+    );
+  } catch (error) {
+    next(error);
+  }
+};

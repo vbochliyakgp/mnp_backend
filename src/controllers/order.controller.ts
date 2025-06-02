@@ -446,3 +446,564 @@ export const updateOrderProducts = async (
     next(error);
   }
 };
+
+export const getPendingOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      customer,
+      productType,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const where: any = {
+      status: "PENDING",
+    };
+
+    if (customer) where.customer = { name: { contains: customer as string } };
+    if (productType) {
+      where.items = {
+        some: {
+          product: {
+            name: { contains: productType as string },
+          },
+        },
+      };
+    }
+    if (startDate && endDate) {
+      where.date = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+        orderBy: {
+          date: "desc",
+        },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    // Format orders to match UI
+    const formattedOrders = orders.map((order) => ({
+      orderId: order.orderId,
+      customerName: order.customer.company || order.customer.name,
+      product: order.items.map((item) => item.product.name).join(", "),
+      quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
+      date: order.date.toISOString().split("T")[0],
+      status: order.status,
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        orders: formattedOrders,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Pending orders retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDispatchedOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      customer,
+      productType,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const where: any = {
+      status: "SHIPPED",
+    };
+
+    if (customer) where.customer = { name: { contains: customer as string } };
+    if (productType) {
+      where.items = {
+        some: {
+          product: {
+            name: { contains: productType as string },
+          },
+        },
+      };
+    }
+    if (startDate && endDate) {
+      where.date = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+          dispatch: true,
+        },
+        orderBy: {
+          date: "desc",
+        },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    // Format orders to match UI
+    const formattedOrders = orders.map((order) => ({
+      orderId: order.orderId,
+      customerName: order.customer.company || order.customer.name,
+      product: order.items.map((item) => item.product.name).join(", "),
+      quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
+      date: order.date.toISOString().split("T")[0],
+      status: order.status,
+      trackingId: order.dispatch?.trackingId || "",
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        orders: formattedOrders,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Dispatched orders retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCancelledOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      customer,
+      productType,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const where: any = {
+      status: "CANCELLED",
+    };
+
+    if (customer) where.customer = { name: { contains: customer as string } };
+    if (productType) {
+      where.items = {
+        some: {
+          product: {
+            name: { contains: productType as string },
+          },
+        },
+      };
+    }
+    if (startDate && endDate) {
+      where.date = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+        orderBy: {
+          date: "desc",
+        },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    // Format orders to match UI
+    const formattedOrders = orders.map((order) => ({
+      orderId: order.orderId,
+      customerName: order.customer.company || order.customer.name,
+      product: order.items.map((item) => item.product.name).join(", "),
+      quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
+      date: order.date.toISOString().split("T")[0],
+      status: order.status,
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        orders: formattedOrders,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Cancelled orders retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const filterOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      status,
+      customer,
+      productType,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const where: any = {};
+
+    if (status) where.status = status;
+    if (customer) where.customer = { name: { contains: customer as string } };
+    if (productType) {
+      where.items = {
+        some: {
+          product: {
+            name: { contains: productType as string },
+          },
+        },
+      };
+    }
+    if (startDate && endDate) {
+      where.date = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+          dispatch: true,
+        },
+        orderBy: {
+          date: "desc",
+        },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    // Format orders to match UI
+    const formattedOrders = orders.map((order) => ({
+      orderId: order.orderId,
+      customerName: order.customer.company || order.customer.name,
+      product: order.items.map((item) => item.product.name).join(", "),
+      quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
+      date: order.date.toISOString().split("T")[0],
+      status: order.status,
+      trackingId: order.dispatch?.trackingId || "",
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        orders: formattedOrders,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Filtered orders retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const filterOrderBook = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      status,
+      productName,
+      startDate,
+      endDate,
+      search,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const where: any = {};
+
+    // Status filter
+    if (status && status !== "All Status") {
+      where.status = status;
+    }
+
+    // Product filter
+    if (productName) {
+      where.items = {
+        some: {
+          product: {
+            name: { contains: productName as string, mode: "insensitive" },
+          },
+        },
+      };
+    }
+
+    // Date range filter
+    if (startDate && endDate) {
+      where.date = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    // Search filter (customer name or product name)
+    if (search) {
+      where.OR = [
+        {
+          customer: {
+            name: { contains: search as string, mode: "insensitive" },
+          },
+        },
+        {
+          customer: {
+            company: { contains: search as string, mode: "insensitive" },
+          },
+        },
+        {
+          items: {
+            some: {
+              product: {
+                name: { contains: search as string, mode: "insensitive" },
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+        orderBy: { date: "desc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    // Format orders to match UI
+    const formattedOrders = orders.map((order) => ({
+      orderId: order.orderId,
+      customer: order.customer.company || order.customer.name,
+      product: order.items.map((item) => item.product.name).join(", "),
+      date: order.date.toISOString().split("T")[0],
+      status: order.status,
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        orders: formattedOrders,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Filtered orders retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// searchOrders
+export const searchOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      query,
+      status,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    if (!query) {
+      throw new ApiError(400, "Search query is required");
+    }
+
+    const where: any = {
+      OR: [
+        { orderId: { contains: query as string, mode: "insensitive" } },
+        {
+          customer: {
+            OR: [
+              { name: { contains: query as string, mode: "insensitive" } },
+              { company: { contains: query as string, mode: "insensitive" } },
+            ],
+          },
+        },
+        {
+          items: {
+            some: {
+              product: {
+                name: { contains: query as string, mode: "insensitive" },
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    // Additional filters
+    if (status) {
+      where.status = status;
+    }
+
+    if (startDate && endDate) {
+      where.date = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+            },
+            take: 1, // Get at least one product for display
+          },
+        },
+        orderBy: {
+          date: "desc",
+        },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    // Format orders to match UI table
+    const formattedOrders = orders.map((order) => ({
+      orderId: order.orderId,
+      customer: order.customer.company || order.customer.name,
+      date: order.date.toISOString().split("T")[0], // Format as YYYY-MM-DD
+      status: order.status,
+      product: order.items[0]?.product?.name || "Multiple Products",
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        orders: formattedOrders,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Orders search results"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
