@@ -211,3 +211,106 @@ export const updateDispatchStatus = async (
     next(error);
   }
 };
+
+export const searchShipments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const {
+      query,
+      status,
+      startDate,
+      endDate,
+      carrier,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const where: any = {};
+
+    // Search across multiple fields
+    if (query) {
+      where.OR = [
+        { dispatchId: { contains: query as string, mode: "insensitive" } },
+        {
+          order: {
+            orderId: { contains: query as string, mode: "insensitive" },
+          },
+        },
+        { customer: { contains: query as string, mode: "insensitive" } },
+        { driverName: { contains: query as string, mode: "insensitive" } },
+        { carNumber: { contains: query as string, mode: "insensitive" } },
+        { trackingId: { contains: query as string, mode: "insensitive" } },
+        { shippingAddress: { contains: query as string, mode: "insensitive" } },
+      ];
+    }
+
+    // Status filter
+    if (status && status !== "All") {
+      where.status = status;
+    }
+
+    // Date range filter
+    if (startDate && endDate) {
+      where.createdAt = {
+        gte: new Date(startDate as string),
+        lte: new Date(endDate as string),
+      };
+    }
+
+    // Carrier filter
+    if (carrier && carrier !== "All") {
+      where.carrier = carrier;
+    }
+
+    const [shipments, totalCount] = await Promise.all([
+      prisma.dispatch.findMany({
+        where,
+        include: {
+          order: {
+            select: {
+              orderId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.dispatch.count({ where }),
+    ]);
+
+    // Format response to match UI
+    const formattedShipments = shipments.map((shipment) => ({
+      dispatchId: shipment.dispatchId,
+      orderId: shipment.order?.orderId || "N/A",
+      customer: shipment.customer,
+      status: shipment.status
+        .split("_")
+        .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+        .join(" "), // Convert READY_FOR_PICKUP to "Ready for pickup"
+      date: shipment.createdAt.toISOString().split("T")[0],
+      carrier: shipment.carrier,
+      tracking: shipment.trackingId,
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        shipments: formattedShipments,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Shipments retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};

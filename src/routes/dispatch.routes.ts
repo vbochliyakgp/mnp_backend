@@ -4,7 +4,9 @@ import {
   getTodayDispatches,
   getAllDispatches,
   updateDispatchStatus,
+  searchShipments,
 } from "../controllers/dispatch.controller";
+import { searchOrders } from "../controllers/order.controller";
 
 const router = express.Router();
 
@@ -12,5 +14,6 @@ router.post("/", createDispatch);
 router.get("/today", getTodayDispatches);
 router.get("/", getAllDispatches);
 router.patch("/:id/status", updateDispatchStatus);
+router.get("/search-shipment", searchShipments);
 
 export default router;
