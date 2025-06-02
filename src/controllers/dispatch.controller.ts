@@ -314,3 +314,145 @@ export const searchShipments = async (
     next(error);
   }
 };
+
+export const getDeliveredShipments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { search, page = 1, limit = 10 } = req.query;
+
+    const where: any = {
+      status: "DELIVERED",
+    };
+
+    if (search) {
+      where.OR = [
+        { dispatchId: { contains: search as string, mode: "insensitive" } },
+        {
+          order: {
+            orderId: { contains: search as string, mode: "insensitive" },
+          },
+        },
+        { customer: { contains: search as string, mode: "insensitive" } },
+        { trackingId: { contains: search as string, mode: "insensitive" } },
+      ];
+    }
+
+    const [shipments, totalCount] = await Promise.all([
+      prisma.dispatch.findMany({
+        where,
+        include: {
+          order: {
+            select: {
+              orderId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.dispatch.count({ where }),
+    ]);
+
+    const formattedShipments = shipments.map((shipment) => ({
+      dispatchId: shipment.dispatchId,
+      orderId: shipment.order?.orderId || "N/A",
+      customer: shipment.customer,
+      status: "Delivered", // Hardcoded since we're filtering by status
+      date: shipment.createdAt.toISOString().split("T")[0],
+      carrier: shipment.carrier,
+      tracking: shipment.trackingId,
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        shipments: formattedShipments,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "Delivered shipments retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getInTransitShipments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { search, page = 1, limit = 10 } = req.query;
+
+    const where: any = {
+      status: "IN_TRANSIT",
+    };
+
+    if (search) {
+      where.OR = [
+        { dispatchId: { contains: search as string, mode: "insensitive" } },
+        {
+          order: {
+            orderId: { contains: search as string, mode: "insensitive" },
+          },
+        },
+        { customer: { contains: search as string, mode: "insensitive" } },
+        { trackingId: { contains: search as string, mode: "insensitive" } },
+      ];
+    }
+
+    const [shipments, totalCount] = await Promise.all([
+      prisma.dispatch.findMany({
+        where,
+        include: {
+          order: {
+            select: {
+              orderId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+      }),
+      prisma.dispatch.count({ where }),
+    ]);
+
+    const formattedShipments = shipments.map((shipment) => ({
+      dispatchId: shipment.dispatchId,
+      orderId: shipment.order?.orderId || "N/A",
+      customer: shipment.customer,
+      status: "In Transit", // Hardcoded since we're filtering by status
+      date: shipment.createdAt.toISOString().split("T")[0],
+      carrier: shipment.carrier,
+      tracking: shipment.trackingId,
+    }));
+
+    successResponse(
+      res,
+      200,
+      {
+        shipments: formattedShipments,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
+      },
+      "In Transit shipments retrieved successfully"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
