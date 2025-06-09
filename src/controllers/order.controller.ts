@@ -174,7 +174,7 @@ export const getOrderBook = async (
   next: NextFunction
 ) => {
   try {
-    const { filter } = req.query;
+    const { filter, page = 1, limit = 5 } = req.query;
 
     // Get counts for the dashboard header
     const [newOrdersCount, inProductionCount, completedCount] =
@@ -205,12 +205,14 @@ export const getOrderBook = async (
           include: {
             product: true,
           },
-          take: 1, // Only get the first product for the list view
+          take: 1,
         },
       },
       orderBy: { date: "desc" },
-      take: 5, // Default to 5 orders as shown in UI
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
     });
+    const totalCount = await prisma.order.count({ where });
 
     // Format the orders to match the UI table
     const formattedOrders = orders.map((order) => ({
@@ -231,8 +233,12 @@ export const getOrderBook = async (
           completed: completedCount,
         },
         orders: formattedOrders,
-        total: orders.length,
-        showing: orders.length,
+        pagination: {
+          total: totalCount,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+        },
       },
       "Order book data retrieved successfully"
     );
@@ -914,8 +920,7 @@ export const searchOrders = async (
     const {
       query,
       status,
-      startDate,
-      endDate,
+
       page = 1,
       limit = 10,
     } = req.query;
@@ -950,13 +955,6 @@ export const searchOrders = async (
     // Additional filters
     if (status) {
       where.status = status;
-    }
-
-    if (startDate && endDate) {
-      where.date = {
-        gte: new Date(startDate as string),
-        lte: new Date(endDate as string),
-      };
     }
 
     const [orders, totalCount] = await Promise.all([
