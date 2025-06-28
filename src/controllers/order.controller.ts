@@ -119,8 +119,8 @@ export const createOrder = async (
         weight: item.weight || product.weight,
         quantity: item.quantity,
         unit: item.unit || product.unit,
-        unitPrice: product.price,
-        total: product.price * item.quantity,
+        unitPrice: item.unitPrice || 0,
+        total: (item.unitPrice || 0) * item.quantity,
         variant: item.variant,
       };
     });
@@ -484,8 +484,8 @@ export const updateOrderProducts = async (
         weight: item.weight || product.weight,
         quantity: item.quantity,
         unit: item.unit || product.unit,
-        unitPrice: product.price,
-        total: product.price * item.quantity,
+        unitPrice: item.unitPrice || 0,
+        total: (item.unitPrice || 0) * item.quantity,
         variant: item.variant,
       };
     });

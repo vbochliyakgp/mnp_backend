@@ -57,7 +57,6 @@ model Product {
   gsm             Int
   stock           Int         @default(0)
   unit            String      @default("units")
-  price           Float
   width           Float
   length          Float
   weight          Float?
