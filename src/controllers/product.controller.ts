@@ -23,6 +23,10 @@ export const createProduct = async (
       data: {
         itemId,
         name,
+        type: "ROLL",
+        gsm: 0,
+        width: 0,
+        length: 0,
         category,
         price,
         materials: {

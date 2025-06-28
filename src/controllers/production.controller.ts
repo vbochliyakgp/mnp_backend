@@ -103,11 +103,7 @@ export const getProductionSchedule = async (
       where,
       include: {
         product: true,
-        order: {
-          include: {
-            customer: true,
-          },
-        },
+        order: true,
       },
       orderBy: {
         createdAt: "desc",

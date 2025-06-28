@@ -42,13 +42,13 @@ export const getDashboardSummary = async (
       }),
 
       // Active Customers (placed at least one order)
-      prisma.customer.count({
+      prisma.order.groupBy({
+        by: ["customer"],
         where: {
-          orders: {
-            some: {
-              updatedAt: dateRange,
-            },
-          },
+          updatedAt: dateRange,
+        },
+        _count: {
+          customer: true,
         },
       }),
 
@@ -92,17 +92,19 @@ export const getDashboardSummary = async (
         summary: {
           totalRevenue: totalRevenue._sum.total || 0,
           completedOrders,
-          activeCustomers,
+          activeCustomers: activeCustomers.length,
           productionUnits: productionUnits._sum.quantity || 0,
         },
-        topProducts: topProducts.map((p) => ({
+        topProducts: topProducts.map((p: any) => ({
           name: p.name,
           unitsSold: p.unitsSold,
         })),
         inventoryStatus: {
-          lowStock: inventoryStatus.filter((i) => i.status === "LOW_STOCK"),
+          lowStock: inventoryStatus.filter(
+            (i: any) => i.status === "LOW_STOCK"
+          ),
           outOfStock: inventoryStatus.filter(
-            (i) => i.status === "OUT_OF_STOCK"
+            (i: any) => i.status === "OUT_OF_STOCK"
           ),
         },
         productionEfficiency,
@@ -181,10 +183,9 @@ async function calculateCustomerSegments(dateRange: { gte: Date; lte: Date }) {
         WHEN SUM(o.total) > 100000 THEN 'Medium Business'
         ELSE 'Small Orders'
       END AS segment,
-      COUNT(DISTINCT c.id) AS customer_count,
+      COUNT(DISTINCT o.customer) AS customer_count,
       SUM(o.total) AS total_value
-    FROM "Customer" c
-    JOIN "Order" o ON c.id = o."customerId"
+    FROM "Order" o
     WHERE o."status" = 'DELIVERED'
       AND o."updatedAt" BETWEEN ${dateRange.gte} AND ${dateRange.lte}
     GROUP BY segment
@@ -205,37 +206,36 @@ async function calculateRepeatCustomerMetrics(dateRange: {
   const metrics = await prisma.$queryRaw<MetricsResult[]>`
     WITH customer_orders AS (
       SELECT
-        c.id,
+        o.customer,
         COUNT(o.id) AS order_count,
         AVG(o.total) AS avg_order_value
-      FROM "Customer" c
-      JOIN "Order" o ON c.id = o."customerId"
+      FROM "Order" o
       WHERE o."status" = 'DELIVERED'
         AND o."updatedAt" BETWEEN ${dateRange.gte} AND ${dateRange.lte}
-      GROUP BY c.id
+      GROUP BY o.customer
     )
     SELECT
-      COUNT(id) FILTER (WHERE order_count > 1) AS repeat_customers,
+      COUNT(customer) FILTER (WHERE order_count > 1) AS repeat_customers,
       AVG(avg_order_value) AS avg_order_value,
       AVG(avg_order_value * 0.3 * order_count) AS lifetime_value
     FROM customer_orders
   `;
 
-  const totalCustomers = await prisma.customer.count({
+  const totalCustomers = await prisma.order.groupBy({
+    by: ["customer"],
     where: {
-      orders: {
-        some: {
-          status: "DELIVERED",
-          updatedAt: dateRange,
-        },
-      },
+      status: "DELIVERED",
+      updatedAt: dateRange,
+    },
+    _count: {
+      customer: true,
     },
   });
 
   return {
     repeatCustomerRate:
-      totalCustomers > 0 && metrics[0]?.repeat_customers
-        ? (metrics[0].repeat_customers / totalCustomers) * 100
+      totalCustomers.length > 0 && metrics[0]?.repeat_customers
+        ? (metrics[0].repeat_customers / totalCustomers.length) * 100
         : 0,
     avgOrderValue: metrics[0]?.avg_order_value || 0,
     customerLifetimeValue: metrics[0]?.lifetime_value || 0,

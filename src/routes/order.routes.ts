@@ -1,6 +1,8 @@
 import express from "express";
 import {
   createOrder,
+  createOrderByWhatsApp,
+  getCustomerByWhatsApp,
   getOrders,
   getOrderBook,
   updateOrderStatus,
@@ -16,26 +18,26 @@ import {
 
 const router = express.Router();
 
+// Standard order routes
 router.post("/", createOrder);
 router.get("/", getOrders);
 router.get("/book", getOrderBook);
-router.patch("/:id/status", updateOrderStatus);
-
 router.get("/:id", getOrderDetails);
-
-// Update order status
 router.patch("/:id/status", updateOrderStatus);
-
-// Update order products
 router.patch("/:id/products", updateOrderProducts);
 
+// Status filtered routes
 router.get("/pending", getPendingOrders);
 router.get("/dispatched", getDispatchedOrders);
 router.get("/cancelled", getCancelledOrders);
 
+// Filter and search routes
 router.get("/filter", filterOrders);
-router.get("/filter/getBook", filterOrderBook); // use this route to filter in both orders and order book
+router.get("/filter/book", filterOrderBook);
+router.get("/search", searchOrders);
 
-router.get("/search-orders-book", searchOrders);
+// WhatsApp integration routes
+router.post("/whatsapp", createOrderByWhatsApp);
+router.get("/customer/:whatsapp", getCustomerByWhatsApp);
 
 export default router;

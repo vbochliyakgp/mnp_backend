@@ -115,6 +115,7 @@ export const addFinishedProduct = async (
         itemId,
         name,
         type,
+        gsm: 0, // Default GSM value, should be provided in the request
         width: parseFloat(width),
         stock: parseInt(quantity),
         unit,

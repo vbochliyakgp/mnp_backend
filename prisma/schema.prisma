@@ -22,7 +22,7 @@ model User {
   updatedAt DateTime   @updatedAt
 
   // Relations
-  orders     Order[]
+
   dispatches Dispatch[]
 
   @@map("users")
@@ -49,22 +49,28 @@ model RawMaterial {
 }
 
 model Product {
-  id           String      @id @default(cuid())
-  itemId       String      @unique
-  name         String
-  type         String? // "rolls" or "bundles"
-  category     String      @default("Finished Product")
-  stock        Int         @default(0)
-  unit         String      @default("units")
-  price        Float
-  width        Float?
-  length       Float? // length per roll/bundle
-  status       StockStatus @default(IN_STOCK)
-  isTopSelling Boolean     @default(false)
-  unitsSold    Int         @default(0)
-  remarks      String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  itemId          String      @unique
+  name            String
+  type            ProductType
+  category        String      @default("Tarpaulin")
+  gsm             Int
+  stock           Int         @default(0)
+  unit            String      @default("units")
+  price           Float
+  width           Float
+  length          Float
+  weight          Float?
+  colorTop        String?
+  colorBottom     String?
+  piecesPerBundle Int?
+  variant         String?
+  status          StockStatus @default(IN_STOCK)
+  isTopSelling    Boolean     @default(false)
+  unitsSold       Int         @default(0)
+  remarks         String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   materials   ProductMaterial[]
   orderItems  OrderItem[]
@@ -77,9 +83,8 @@ model ProductMaterial {
   id            String @id @default(cuid())
   productId     String
   rawMaterialId String
-  quantity      Float // quantity of raw material needed per product unit
+  quantity      Float
 
-  // Relations
   product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   rawMaterial RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
 
@@ -87,41 +92,24 @@ model ProductMaterial {
   @@map("product_materials")
 }
 
-model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  company   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  orders Order[]
-
-  @@map("customers")
-}
-
 model Order {
-  id             String      @id @default(cuid())
-  orderId        String      @unique
-  customerId     String
-  userId         String?
-  date           DateTime    @default(now())
-  status         OrderStatus @default(PENDING)
-  total          Float
-  salesProcess   String?
-  deliveryMethod String? // X-Amoney, FOR Delivery, Transport
-  carrier        String? // Transport company if selected
-  trackingId     String?
-  remarks        String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  // Relations
-  customer        Customer          @relation(fields: [customerId], references: [id])
-  user            User?             @relation(fields: [userId], references: [id])
+  id              String            @id @default(cuid())
+  orderId         String            @unique
+  date            DateTime          @default(now())
+  status          OrderStatus       @default(PENDING)
+  total           Float
+  salesPerson     String?
+  deliveryMethod  DeliveryMethod?
+  carrier         String?
+  trackingId      String?
+  customerPhone   String?
+  customerAddress String?
+  transportName   String?
+  transportPhone  String?
+  remarks         String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  customer        String
   items           OrderItem[]
   dispatch        Dispatch?
   ProductionBatch ProductionBatch[]
@@ -137,12 +125,13 @@ model OrderItem {
   colorBottom String?
   length      Float
   width       Float
+  weight      Float?
   quantity    Int
   unit        String
   unitPrice   Float
   total       Float
+  variant     String?
 
-  // Relations
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
 
@@ -151,7 +140,7 @@ model OrderItem {
 
 model ProductionBatch {
   id        String           @id @default(cuid())
-  batchId   String           @unique // e.g., HD2030-001, WC1525-002
+  batchId   String           @unique
   orderId   String?
   productId String
   quantity  Int
@@ -161,7 +150,6 @@ model ProductionBatch {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  // Relations
   order   Order?  @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])
 
@@ -172,7 +160,7 @@ model Dispatch {
   id              String         @id @default(cuid())
   dispatchId      String         @unique
   orderId         String         @unique
-  userId          String? // dispatcher
+  userId          String?
   customer        String
   status          DispatchStatus @default(READY_FOR_PICKUP)
   loadingDate     DateTime?
@@ -180,15 +168,14 @@ model Dispatch {
   shippingAddress String?
   carNumber       String?
   driverNumber    String?
-  carrier         String? // e.g., FedEx, UPS
-  transportation  String? // Self pickup, Third-party logistics
+  carrier         String?
+  transportation  String?
   trackingId      String?
-  packageDetails  String? // Weight, Dimensions
+  packageDetails  String?
   remarks         String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  // Relations
   order Order @relation(fields: [orderId], references: [id])
   user  User? @relation(fields: [userId], references: [id])
 
@@ -273,4 +260,16 @@ enum AlertSeverity {
   WARNING
   ERROR
   CRITICAL
+}
+
+// New enums based on UI requirements
+enum ProductType {
+  ROLL
+  BUNDLE
+}
+
+enum DeliveryMethod {
+  FACTORY_PICKUP
+  THIRD_PARTY_DELIVERY
+  SELF_TRANSPORT
 }

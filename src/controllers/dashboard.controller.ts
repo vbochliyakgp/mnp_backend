@@ -194,7 +194,7 @@ export const searchDashboard = async (
       where: {
         OR: [
           { orderId: { contains: query } },
-          { customer: { name: { contains: query } } },
+          { customer: { contains: query } },
         ],
       },
       take: 5,
@@ -208,13 +208,22 @@ export const searchDashboard = async (
       take: 5,
     });
 
-    // Search customers
-    const customers = await prisma.customer.findMany({
+    // Search customers by looking at unique customers in orders
+    const customerOrders = await prisma.order.findMany({
       where: {
-        OR: [{ name: { contains: query } }, { company: { contains: query } }],
+        customer: { contains: query },
       },
+      select: {
+        customer: true,
+      },
+      distinct: ["customer"],
       take: 5,
     });
+
+    const customers = customerOrders.map((order) => ({
+      name: order.customer,
+      phone: "", // Customer phone is not stored separately in the current schema
+    }));
 
     successResponse(
       res,
