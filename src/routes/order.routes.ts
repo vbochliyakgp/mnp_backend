@@ -1,7 +1,6 @@
 import express from "express";
 import {
   createOrder,
-  createOrderByWhatsApp,
   getCustomerByWhatsApp,
   getOrders,
   getOrderBook,
@@ -37,7 +36,7 @@ router.get("/filter/book", filterOrderBook);
 router.get("/search", searchOrders);
 
 // WhatsApp integration routes
-router.post("/whatsapp", createOrderByWhatsApp);
+
 router.get("/customer/:whatsapp", getCustomerByWhatsApp);
 
 export default router;
