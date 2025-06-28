@@ -55,34 +55,38 @@ export const addRawMaterial = async (
   next: NextFunction
 ) => {
   try {
-    const { name, supplier, quantity, unit, price, reorderLevel, remarks } =
+    const { name, supplier, quantity, unit, price, gstRate, remarks } =
       req.body;
+
+    if (!name || !quantity || !unit || !price) {
+      throw new ApiError(400, "Name, quantity, unit, and price are required");
+    }
+
+    // Calculate total amount
+    const totalAmount =
+      parseFloat(price) *
+      parseFloat(quantity) *
+      (1 + (parseFloat(gstRate) || 0) / 100);
 
     // Generate item ID
     const lastMaterial = await prisma.rawMaterial.findFirst({
       orderBy: { itemId: "desc" },
     });
     const nextId = lastMaterial
-      ? parseInt(lastMaterial.itemId.replace("MAT", "")) + 1
+      ? parseInt(lastMaterial.itemId.split("-")[1]) + 1
       : 1;
-    const itemId = `MAT${nextId.toString().padStart(3, "0")}`;
+    const itemId = `RM-${nextId.toString().padStart(3, "0")}`;
 
     const rawMaterial = await prisma.rawMaterial.create({
       data: {
         itemId,
         name,
-        supplier,
+        supplier: supplier || null,
         stock: parseFloat(quantity),
         unit,
         price: parseFloat(price),
-        status:
-          quantity > 0
-            ? reorderLevel && quantity <= reorderLevel
-              ? "LOW_STOCK"
-              : "IN_STOCK"
-            : "OUT_OF_STOCK",
-        reorderLevel: reorderLevel ? parseFloat(reorderLevel) : null,
-        remarks,
+        status: parseFloat(quantity) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+        remarks: remarks || null,
       },
     });
 
@@ -98,32 +102,67 @@ export const addFinishedProduct = async (
   next: NextFunction
 ) => {
   try {
-    const { type, name, width, quantity, unit, length, price, remarks } =
-      req.body;
+    const {
+      type,
+      name,
+      gsm,
+      colorTop,
+      colorBottom,
+      width,
+      length,
+      weight,
+      quantity,
+      piecesPerBundle,
+      variant,
+      remarks,
+    } = req.body;
+
+    if (!type || !name || !quantity) {
+      throw new ApiError(400, "Type, name, and quantity are required");
+    }
 
     // Generate item ID
+    const prefix = type === "ROLL" ? "TR" : "TB";
     const lastProduct = await prisma.product.findFirst({
+      where: { itemId: { startsWith: prefix } },
       orderBy: { itemId: "desc" },
     });
     const nextId = lastProduct
-      ? parseInt(lastProduct.itemId.replace("PROD", "")) + 1
+      ? parseInt(lastProduct.itemId.replace(prefix, "")) + 1
       : 1;
-    const itemId = `PROD${nextId.toString().padStart(3, "0")}`;
+    const itemId = `${prefix}${nextId.toString().padStart(3, "0")}`;
+
+    const productData: any = {
+      itemId,
+      name,
+      type,
+      category: "Tarpaulin",
+      gsm: gsm ? parseInt(gsm) : 0,
+      colorTop: colorTop || null,
+      colorBottom: colorBottom || null,
+      stock: parseInt(quantity),
+      status: parseInt(quantity) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+      variant: variant || null,
+      remarks: remarks || null,
+    };
+
+    if (type === "ROLL") {
+      productData.width = width ? parseFloat(width) : null;
+      productData.length = length ? parseFloat(length) : null;
+      productData.weight = weight ? parseFloat(weight) : null;
+      productData.unit = "rolls";
+    } else if (type === "BUNDLE") {
+      productData.width = width ? parseFloat(width) : null;
+      productData.length = length ? parseFloat(length) : null;
+      productData.weight = weight ? parseFloat(weight) : null;
+      productData.piecesPerBundle = piecesPerBundle
+        ? parseInt(piecesPerBundle)
+        : null;
+      productData.unit = "bundles";
+    }
 
     const product = await prisma.product.create({
-      data: {
-        itemId,
-        name,
-        type,
-        gsm: 0, // Default GSM value, should be provided in the request
-        width: parseFloat(width),
-        stock: parseInt(quantity),
-        unit,
-        length: parseFloat(length),
-        price: price ? parseFloat(price) : 0,
-        status: quantity > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
-        remarks,
-      },
+      data: productData,
     });
 
     successResponse(res, 201, product, "Finished product added successfully");
@@ -258,30 +297,46 @@ export const getFinishedProducts = async (
   next: NextFunction
 ) => {
   try {
-    const { search, status, page = 1, limit = 10 } = req.query;
+    const { status, type, page = 1, limit = 10 } = req.query;
 
     const where: any = {
-      category: "Finished Product",
+      category: "Tarpaulin",
     };
 
-    if (search) {
-      where.OR = [
-        { itemId: { contains: search as string, mode: "insensitive" } },
-        { name: { contains: search as string, mode: "insensitive" } },
-        { type: { contains: search as string, mode: "insensitive" } },
-      ];
-    }
-
+    // Status filter (from your UI)
     if (status && status !== "All Statuses") {
       where.status = status;
+    }
+
+    // Type filter (ROLL or BUNDLE - from your UI tabs)
+    if (type && (type === "ROLL" || type === "BUNDLE")) {
+      where.type = type;
     }
 
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
         where,
-        orderBy: { name: "asc" },
+        orderBy: { createdAt: "desc" },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
+        select: {
+          id: true,
+          itemId: true,
+          name: true,
+          type: true,
+          gsm: true,
+          colorTop: true,
+          colorBottom: true,
+          stock: true,
+          unit: true,
+          status: true,
+          width: true,
+          length: true,
+          weight: true,
+          piecesPerBundle: true,
+          variant: true,
+          createdAt: true,
+        },
       }),
       prisma.product.count({ where }),
     ]);
