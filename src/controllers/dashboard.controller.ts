@@ -54,7 +54,7 @@ export const getManufacturingDashboard = async (
         },
       },
       include: {
-        items: true, // Include the items relation
+        items: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -87,10 +87,9 @@ export const getManufacturingDashboard = async (
     );
 
     // Get ready for dispatch count
-    const readyForDispatch = await prisma.order.count({
+    const readyForDispatch = await prisma.dispatch.count({
       where: {
-        status: "COMPLETED",
-        dispatch: null,
+        status: "READY_FOR_PICKUP",
       },
     });
 
@@ -100,11 +99,8 @@ export const getManufacturingDashboard = async (
         createdAt: "desc",
       },
       include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
+        items: true,
+        dispatch: true,
       },
       take: 5,
     });
@@ -112,7 +108,8 @@ export const getManufacturingDashboard = async (
     const formattedRecentOrders = recentOrders.map((order) => ({
       orderId: order.orderId,
       total: order.total,
-      productName: order.items[0]?.product?.name || "Multiple Products",
+      status: order.status,
+      dispatchStatus: order.dispatch?.status || "NOT_DISPATCHED",
     }));
 
     // Count completed and pending orders
@@ -132,27 +129,28 @@ export const getManufacturingDashboard = async (
     const productionAlerts = [
       ...lowStockMaterials.map((material) => ({
         type: "STOCK",
-        message: `Low Stock: ${material.name} (${material.stock} ${material.category.includes("sq") ? "sq meters" : "units"} remaining)`,
-        completed: false,
+        message: `Low Stock: ${material.name} (${material.stock} ${material.unit} remaining)`,
+        severity: material.status === "OUT_OF_STOCK" ? "CRITICAL" : "WARNING",
       })),
       ...delayedProductions.map((production) => ({
         type: "PRODUCTION",
         message: `Delayed Production: ${production.product.name} batch #${production.batchId}`,
-        completed: true,
+        severity: "WARNING",
       })),
       ...recentLargeOrders.map((order) => ({
         type: "ORDER",
         message: `New bulk order received: ${order.items.reduce((sum, item) => sum + item.quantity, 0)} units`,
-        completed: true,
+        severity: "INFO",
       })),
     ];
 
     // Prepare production schedule
     const productionSchedule = todaysProduction.map((batch) => ({
-      productName: batch.product.name,
+      productName: batch.product?.name || "Custom Product",
       batchId: batch.batchId,
       status: batch.status,
       quantity: batch.quantity,
+      orderId: batch.order?.orderId || "Direct Production",
     }));
 
     successResponse(
@@ -193,9 +191,14 @@ export const searchDashboard = async (
     const orders = await prisma.order.findMany({
       where: {
         OR: [
-          { orderId: { contains: query } },
-          { customer: { contains: query } },
+          { orderId: { contains: query, mode: "insensitive" } },
+          { customer: { contains: query, mode: "insensitive" } },
+          { customerPhone: { contains: query, mode: "insensitive" } },
         ],
+      },
+      include: {
+        items: true,
+        dispatch: true,
       },
       take: 5,
     });
@@ -203,18 +206,36 @@ export const searchDashboard = async (
     // Search products
     const products = await prisma.product.findMany({
       where: {
-        name: { contains: query },
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { itemId: { contains: query, mode: "insensitive" } },
+        ],
       },
       take: 5,
     });
 
-    // Search customers by looking at unique customers in orders
+    // Search raw materials
+    const rawMaterials = await prisma.rawMaterial.findMany({
+      where: {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { itemId: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      take: 5,
+    });
+
+    // Search customers from orders
     const customerOrders = await prisma.order.findMany({
       where: {
-        customer: { contains: query },
+        OR: [
+          { customer: { contains: query, mode: "insensitive" } },
+          { customerPhone: { contains: query, mode: "insensitive" } },
+        ],
       },
       select: {
         customer: true,
+        customerPhone: true,
       },
       distinct: ["customer"],
       take: 5,
@@ -222,7 +243,7 @@ export const searchDashboard = async (
 
     const customers = customerOrders.map((order) => ({
       name: order.customer,
-      phone: "", // Customer phone is not stored separately in the current schema
+      phone: order.customerPhone || "",
     }));
 
     successResponse(
@@ -231,6 +252,7 @@ export const searchDashboard = async (
       {
         orders,
         products,
+        rawMaterials,
         customers,
       },
       "Search results retrieved successfully"

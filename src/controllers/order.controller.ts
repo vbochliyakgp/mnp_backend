@@ -107,8 +107,6 @@ export const createOrder = async (
       const total = unitPrice * (item.quantity || 1);
 
       return {
-        productId: item.productId || null, // Make productId optional
-        productName: item.productName || "Custom Item", // Add product name field
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
         length: item.length,
@@ -119,7 +117,6 @@ export const createOrder = async (
         unitPrice: unitPrice,
         total: total,
         variant: item.variant,
-        isCustom: !item.productId, // Flag to indicate custom item
       };
     });
 
@@ -141,26 +138,7 @@ export const createOrder = async (
         total,
         remarks,
         items: {
-          create: orderItems.map((item: any) => ({
-            productId: item.productId,
-            colorTop: item.colorTop,
-            colorBottom: item.colorBottom,
-            length: item.length,
-            width: item.width,
-            weight: item.weight,
-            quantity: item.quantity,
-            unit: item.unit,
-            unitPrice: item.unitPrice,
-            total: item.total,
-            variant: item.variant,
-            // Add custom fields to metadata if needed
-            metadata: item.isCustom
-              ? {
-                  productName: item.productName,
-                  isCustom: true,
-                }
-              : undefined,
-          })),
+          create: orderItems,
         },
       },
       include: { items: true },
@@ -176,9 +154,7 @@ export const createOrder = async (
           phone: order.customerPhone,
           address: order.customerAddress,
         },
-        items: order.items.map((item) => ({
-          ...item,
-        })),
+        items: order.items,
         total: order.total,
         status: "PENDING",
       },
@@ -227,7 +203,7 @@ export const getOrders = async (
       prisma.order.findMany({
         where,
         include: {
-          items: { include: { product: true }, take: 1 },
+          items: true,
           dispatch: true,
         },
         orderBy: { date: "desc" },
@@ -244,7 +220,7 @@ export const getOrders = async (
       phone: order.customerPhone,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
-      product: order.items[0]?.product?.name || "Multiple items",
+      product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
     }));
@@ -288,7 +264,7 @@ export const getOrderBook = async (
       prisma.order.findMany({
         where,
         include: {
-          items: { include: { product: true }, take: 1 },
+          items: true,
           dispatch: true,
         },
         orderBy: { date: "desc" },
@@ -312,7 +288,7 @@ export const getOrderBook = async (
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
-      product: order.items[0]?.product?.name || "Multiple items",
+      product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
     }));
@@ -354,9 +330,7 @@ export const getOrderDetails = async (
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
-        items: {
-          include: { product: true },
-        },
+        items: true,
         dispatch: true,
         ProductionBatch: true,
       },
@@ -382,14 +356,11 @@ export const getOrderDetails = async (
       },
       products: order.items.map((item: any) => ({
         id: item.id,
-        productId: item.product.id,
-        name: item.product.name,
-        type: item.product.type,
-        gsm: item.product.gsm,
-        length: item.length,
-        width: item.width,
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
+        length: item.length,
+        width: item.width,
+        weight: item.weight,
         quantity: item.quantity,
         unit: item.unit,
         unitPrice: item.unitPrice,
@@ -487,26 +458,20 @@ export const updateOrderProducts = async (
 
     if (!items?.length) throw new ApiError(400, "Items array required");
 
-    const products = await prisma.product.findMany({
-      where: { id: { in: items.map((i: any) => i.productId) } },
-    });
-    if (products.length !== items.length) {
-      throw new ApiError(404, "One or more products not found");
-    }
-
     const newItems = items.map((item: any) => {
-      const product = products.find((p) => p.id === item.productId)!;
+      const unitPrice = item.unitPrice || 0;
+      const total = unitPrice * (item.quantity || 1);
+
       return {
-        productId: item.productId,
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
-        length: item.length || product.length,
-        width: item.width || product.width,
-        weight: item.weight || product.weight,
-        quantity: item.quantity,
-        unit: item.unit || product.unit,
-        unitPrice: item.unitPrice || 0,
-        total: (item.unitPrice || 0) * item.quantity,
+        length: item.length,
+        width: item.width,
+        weight: item.weight,
+        quantity: item.quantity || 1,
+        unit: item.unit || "units",
+        unitPrice: unitPrice,
+        total: total,
         variant: item.variant,
       };
     });
@@ -524,7 +489,7 @@ export const updateOrderProducts = async (
           total: newTotal,
           items: { create: newItems },
         },
-        include: { items: { include: { product: true } } },
+        include: { items: true },
       }),
     ]);
 
@@ -555,7 +520,7 @@ export const getPendingOrders = async (
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: { status: "PENDING" },
-        include: { items: { include: { product: true } } },
+        include: { items: true },
         orderBy: { date: "desc" },
         skip,
         take: Number(limit),
@@ -567,7 +532,7 @@ export const getPendingOrders = async (
       orderId: order.orderId,
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
-      products: order.items.map((i) => i.product.name).join(", "),
+      products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
     }));
 
@@ -603,7 +568,7 @@ export const getDispatchedOrders = async (
       prisma.order.findMany({
         where: { status: { in: ["SHIPPED", "DELIVERED"] } },
         include: {
-          items: { include: { product: true } },
+          items: true,
           dispatch: true,
         },
         orderBy: { date: "desc" },
@@ -619,7 +584,7 @@ export const getDispatchedOrders = async (
       orderId: order.orderId,
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
-      products: order.items.map((i) => i.product.name).join(", "),
+      products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       status: order.status,
       trackingId: order.dispatch?.trackingId,
@@ -656,7 +621,7 @@ export const getCancelledOrders = async (
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: { status: "CANCELLED" },
-        include: { items: { include: { product: true } } },
+        include: { items: true },
         orderBy: { date: "desc" },
         skip,
         take: Number(limit),
@@ -668,7 +633,7 @@ export const getCancelledOrders = async (
       orderId: order.orderId,
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
-      products: order.items.map((i) => i.product.name).join(", "),
+      products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
     }));
 
@@ -718,12 +683,13 @@ export const filterOrders = async (
     if (product) {
       where.items = {
         some: {
-          product: {
-            name: {
-              contains: product as string,
-              mode: "insensitive" as Prisma.QueryMode,
+          OR: [
+            { colorTop: { contains: product as string, mode: "insensitive" } },
+            {
+              colorBottom: { contains: product as string, mode: "insensitive" },
             },
-          },
+            { variant: { contains: product as string, mode: "insensitive" } },
+          ],
         },
       };
     }
@@ -738,7 +704,7 @@ export const filterOrders = async (
       prisma.order.findMany({
         where,
         include: {
-          items: { include: { product: true } },
+          items: true,
           dispatch: true,
         },
         orderBy: { date: "desc" },
@@ -753,7 +719,7 @@ export const filterOrders = async (
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
-      products: order.items.map((i) => i.product.name).join(", "),
+      products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
     }));
@@ -822,7 +788,7 @@ export const filterOrderBook = async (
       prisma.order.findMany({
         where,
         include: {
-          items: { include: { product: true }, take: 1 },
+          items: true,
           dispatch: true,
         },
         orderBy: { date: "desc" },
@@ -837,7 +803,7 @@ export const filterOrderBook = async (
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
-      product: order.items[0]?.product?.name || "Multiple items",
+      product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
     }));
@@ -899,7 +865,7 @@ export const searchOrders = async (
       prisma.order.findMany({
         where,
         include: {
-          items: { include: { product: true }, take: 1 },
+          items: true,
           dispatch: true,
         },
         orderBy: { date: "desc" },
@@ -914,7 +880,7 @@ export const searchOrders = async (
       customer: order.customer,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
-      product: order.items[0]?.product?.name || "Multiple items",
+      product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
     }));

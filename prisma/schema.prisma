@@ -71,8 +71,8 @@ model Product {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  materials   ProductMaterial[]
-  orderItems  OrderItem[]
+  materials ProductMaterial[]
+
   productions ProductionBatch[]
 
   @@map("products")
@@ -117,9 +117,9 @@ model Order {
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
-  orderId     String
-  productId   String
+  id      String @id @default(cuid())
+  orderId String
+
   colorTop    String?
   colorBottom String?
   length      Float
@@ -131,8 +131,7 @@ model OrderItem {
   total       Float
   variant     String?
 
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("order_items")
 }
