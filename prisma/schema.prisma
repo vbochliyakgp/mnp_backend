@@ -117,19 +117,22 @@ model Order {
 }
 
 model OrderItem {
-  id      String @id @default(cuid())
-  orderId String
-
-  colorTop    String?
-  colorBottom String?
-  length      Float
-  width       Float
-  weight      Float?
-  quantity    Int
-  unit        String
-  unitPrice   Float
-  total       Float
-  variant     String?
+  id              String  @id @default(cuid())
+  orderId         String
+  itemName        String
+  colorTop        String?
+  colorBottom     String?
+  length          Float
+  gsm             Int
+  width           Float
+  weight          Float?
+  category        String  @default("Tarpaulin")
+  piecesPerBundle Int?
+  quantity        Int
+  unit            String
+  unitPrice       Float
+  total           Float
+  variant         String?
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

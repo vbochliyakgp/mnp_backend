@@ -107,10 +107,12 @@ export const createOrder = async (
       const total = unitPrice * (item.quantity || 1);
 
       return {
+        itemName: item.itemName,
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
         length: item.length,
         width: item.width,
+        gsm: item.gsm || 0,
         weight: item.weight,
         quantity: item.quantity || 1,
         unit: item.unit || "units",
@@ -463,10 +465,12 @@ export const updateOrderProducts = async (
       const total = unitPrice * (item.quantity || 1);
 
       return {
+        itemName: item.itemName,
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
         length: item.length,
         width: item.width,
+        gsm: item.gsm,
         weight: item.weight,
         quantity: item.quantity || 1,
         unit: item.unit || "units",
