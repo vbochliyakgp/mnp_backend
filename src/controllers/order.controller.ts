@@ -101,27 +101,25 @@ export const createOrder = async (
       : 1;
     const orderId = `ORD-${datePrefix}-${nextSeq.toString().padStart(3, "0")}`;
 
-    const products = await prisma.product.findMany({
-      where: { id: { in: items.map((i: any) => i.productId) } },
-    });
-
     const orderItems = items.map((item: any) => {
-      const product = products.find((p) => p.id === item.productId);
-      if (!product)
-        throw new ApiError(404, `Product not found: ${item.productId}`);
+      // Calculate total price if unitPrice is provided, otherwise use 0
+      const unitPrice = item.unitPrice || 0;
+      const total = unitPrice * (item.quantity || 1);
 
       return {
-        productId: item.productId,
+        productId: item.productId || null, // Make productId optional
+        productName: item.productName || "Custom Item", // Add product name field
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
-        length: item.length || product.length,
-        width: item.width || product.width,
-        weight: item.weight || product.weight,
-        quantity: item.quantity,
-        unit: item.unit || product.unit,
-        unitPrice: item.unitPrice || 0,
-        total: (item.unitPrice || 0) * item.quantity,
+        length: item.length,
+        width: item.width,
+        weight: item.weight,
+        quantity: item.quantity || 1,
+        unit: item.unit || "units",
+        unitPrice: unitPrice,
+        total: total,
         variant: item.variant,
+        isCustom: !item.productId, // Flag to indicate custom item
       };
     });
 
@@ -142,9 +140,30 @@ export const createOrder = async (
         transportPhone: transportPhone?.replace(/\D/g, ""),
         total,
         remarks,
-        items: { create: orderItems },
+        items: {
+          create: orderItems.map((item: any) => ({
+            productId: item.productId,
+            colorTop: item.colorTop,
+            colorBottom: item.colorBottom,
+            length: item.length,
+            width: item.width,
+            weight: item.weight,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            total: item.total,
+            variant: item.variant,
+            // Add custom fields to metadata if needed
+            metadata: item.isCustom
+              ? {
+                  productName: item.productName,
+                  isCustom: true,
+                }
+              : undefined,
+          })),
+        },
       },
-      include: { items: { include: { product: true } } },
+      include: { items: true },
     });
 
     successResponse(
@@ -157,7 +176,9 @@ export const createOrder = async (
           phone: order.customerPhone,
           address: order.customerAddress,
         },
-        items: order.items,
+        items: order.items.map((item) => ({
+          ...item,
+        })),
         total: order.total,
         status: "PENDING",
       },
