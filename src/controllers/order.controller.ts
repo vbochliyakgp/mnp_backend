@@ -407,28 +407,6 @@ export const updateOrderStatus = async (
       throw new ApiError(400, "Invalid status value");
     }
 
-    if (["SHIPPED", "DELIVERED"].includes(status)) {
-      const order = await prisma.order.findUnique({
-        where: { id },
-        include: { dispatch: true },
-      });
-
-      if (!order) throw new ApiError(404, "Order not found");
-      if (!order.dispatch && status === "SHIPPED") {
-        throw new ApiError(
-          400,
-          "Dispatch record must be created before shipping"
-        );
-      }
-
-      if (status === "DELIVERED" && order.dispatch) {
-        await prisma.dispatch.update({
-          where: { id: order.dispatch.id },
-          data: { status: "DELIVERED" },
-        });
-      }
-    }
-
     const updatedOrder = await prisma.order.update({
       where: { id },
       data: { status },
@@ -460,6 +438,7 @@ export const updateOrderProducts = async (
 
     if (!items?.length) throw new ApiError(400, "Items array required");
 
+    // Calculate new items with totals
     const newItems = items.map((item: any) => {
       const unitPrice = item.unitPrice || 0;
       const total = unitPrice * (item.quantity || 1);
@@ -480,30 +459,37 @@ export const updateOrderProducts = async (
       };
     });
 
-    const newTotal = newItems.reduce(
+    // Get current order with items to calculate new total
+    const currentOrder = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!currentOrder) throw new ApiError(404, "Order not found");
+
+    // Calculate new total (current total + new items total)
+    const newItemsTotal = newItems.reduce(
       (sum: number, item: any) => sum + item.total,
       0
     );
+    const newTotal = (currentOrder.total || 0) + newItemsTotal;
 
-    const updatedOrder = await prisma.$transaction([
-      prisma.orderItem.deleteMany({ where: { orderId: id } }),
-      prisma.order.update({
-        where: { id },
-        data: {
-          total: newTotal,
-          items: { create: newItems },
-        },
-        include: { items: true },
-      }),
-    ]);
+    const updatedOrder = await prisma.order.update({
+      where: { id },
+      data: {
+        total: newTotal,
+        items: { create: newItems },
+      },
+      include: { items: true },
+    });
 
     successResponse(
       res,
       200,
       {
-        orderId: updatedOrder[1].orderId,
-        items: updatedOrder[1].items,
-        total: updatedOrder[1].total,
+        orderId: updatedOrder.id,
+        items: updatedOrder.items,
+        total: updatedOrder.total,
       },
       "Order products updated"
     );
