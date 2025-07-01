@@ -64,30 +64,34 @@ export const checkCustomerByName = async (
   next: NextFunction
 ) => {
   try {
-    const { name } = req.params; // Get name from URL params instead of query
+    const { name } = req.params;
 
     if (!name?.trim()) {
       throw new ApiError(400, "Customer name is required in URL parameters");
     }
 
-    const customer = await prisma.customer.findFirst({
+    const searchTerm = name.trim();
+
+    const customers = await prisma.customer.findMany({
       where: {
         name: {
-          contains: name.trim(),
+          contains: searchTerm,
           mode: "insensitive",
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 5,
     });
 
     successResponse(
       res,
       200,
       {
-        exists: !!customer,
-        customer: customer || null,
+        count: customers.length,
+        customers,
+        suggestions: customers.map((c) => c.name),
       },
-      customer ? "Customer found" : "No customer found"
+      customers.length ? "Customers found" : "No customers found"
     );
   } catch (error) {
     next(error);
