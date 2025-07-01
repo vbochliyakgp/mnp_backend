@@ -19,7 +19,7 @@ import {
 const router = express.Router();
 
 // Standard order routes
-router.post("/:id", createOrder);
+router.post("/", createOrder);
 router.get("/", getOrders);
 router.get("/book", getOrderBook);
 router.get("/:id", getOrderDetails);

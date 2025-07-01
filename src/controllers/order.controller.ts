@@ -107,14 +107,14 @@ export const createOrder = async (
   try {
     const {
       customerName,
-      customerPhone,
+      customerWhatsapp,
       customerAddress,
       salesPerson,
       deliveryMethod,
       transportName,
-      transportPhone,
+      transportContact,
       items,
-      remarks,
+      mainRemark,
     } = req.body;
 
     // Validate required fields
@@ -125,16 +125,22 @@ export const createOrder = async (
       throw new ApiError(400, "At least one order item is required");
     }
 
-    const { id } = req.params;
 
     // Clean phone numbers
-    const cleanCustomerPhone = customerPhone?.replace(/\D/g, "") || null;
-    const cleanTransportPhone = transportPhone?.replace(/\D/g, "") || null;
+    const cleanCustomerPhone = customerWhatsapp?.replace(/\D/g, "") || null;
+    const cleanTransportPhone = transportContact?.replace(/\D/g, "") || null;
 
-    // Check if customer exists
-    let customer = await prisma.customer.findUnique({
+    const  id  = req.body.customerId;
+    console.log("Customer ID from request body:", id);
+    let customer = null;
+    if (id) {
+      // Check if customer exists
+     customer = await prisma.customer.findUnique({
       where: { id },
     });
+    }
+
+    console.log("Customer :", customer);
 
     // Create or update customer
     if (!customer) {
@@ -209,7 +215,7 @@ export const createOrder = async (
         transportName: transportName?.trim(),
         transportPhone: cleanTransportPhone,
         total,
-        remarks: remarks?.trim(),
+        remarks: mainRemark?.trim(),
         items: {
           create: orderItems,
         },
