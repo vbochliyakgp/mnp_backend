@@ -192,13 +192,18 @@ export const searchDashboard = async (
       where: {
         OR: [
           { orderId: { contains: query, mode: "insensitive" } },
-          { customer: { contains: query, mode: "insensitive" } },
-          { customerPhone: { contains: query, mode: "insensitive" } },
+          { customer: { name: { contains: query, mode: "insensitive" } } },
+          {
+            customer: {
+              customerPhone: { contains: query, mode: "insensitive" },
+            },
+          },
         ],
       },
       include: {
         items: true,
         dispatch: true,
+        customer: true,
       },
       take: 5,
     });
@@ -225,25 +230,24 @@ export const searchDashboard = async (
       take: 5,
     });
 
-    // Search customers from orders
-    const customerOrders = await prisma.order.findMany({
+    // Search customers directly
+    const customersFound = await prisma.customer.findMany({
       where: {
         OR: [
-          { customer: { contains: query, mode: "insensitive" } },
+          { name: { contains: query, mode: "insensitive" } },
           { customerPhone: { contains: query, mode: "insensitive" } },
         ],
       },
       select: {
-        customer: true,
+        name: true,
         customerPhone: true,
       },
-      distinct: ["customer"],
       take: 5,
     });
 
-    const customers = customerOrders.map((order) => ({
-      name: order.customer,
-      phone: order.customerPhone || "",
+    const customers = customersFound.map((customer) => ({
+      name: customer.name,
+      phone: customer.customerPhone || "",
     }));
 
     successResponse(

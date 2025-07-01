@@ -43,12 +43,12 @@ export const getDashboardSummary = async (
 
       // Active Customers (placed at least one order)
       prisma.order.groupBy({
-        by: ["customer"],
+        by: ["customerId"],
         where: {
           updatedAt: dateRange,
         },
         _count: {
-          customer: true,
+          customerId: true,
         },
       }),
 
@@ -222,13 +222,13 @@ async function calculateRepeatCustomerMetrics(dateRange: {
   `;
 
   const totalCustomers = await prisma.order.groupBy({
-    by: ["customer"],
+    by: ["customerId"],
     where: {
       status: "DELIVERED",
       updatedAt: dateRange,
     },
     _count: {
-      customer: true,
+      customerId: true,
     },
   });
 

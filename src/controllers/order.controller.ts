@@ -23,6 +23,9 @@ type DispatchStatus =
   | "DELAYED";
 
 // WhatsApp Integration Functions
+
+const cleanPhoneNumber = (phone: string | undefined) =>
+  phone?.replace(/\D/g, "") || null;
 export const getCustomerByWhatsApp = async (
   req: Request,
   res: Response,
@@ -30,36 +33,61 @@ export const getCustomerByWhatsApp = async (
 ) => {
   try {
     const { whatsapp } = req.params;
-    const cleanWhatsapp = whatsapp.replace(/\D/g, "");
+    const cleanWhatsapp = cleanPhoneNumber(whatsapp);
 
-    const order = await prisma.order.findFirst({
+    const customer = await prisma.customer.findFirst({
       where: {
         customerPhone: {
-          contains: cleanWhatsapp,
+          contains: cleanWhatsapp || "",
         },
       },
       orderBy: { createdAt: "desc" },
-      select: {
-        customer: true,
-        customerPhone: true,
-        customerAddress: true,
-      },
     });
 
     successResponse(
       res,
       200,
       {
-        exists: !!order,
-        customer: order
-          ? {
-              name: order.customer,
-              phone: order.customerPhone,
-              address: order.customerAddress,
-            }
-          : null,
+        exists: !!customer,
+        customer: customer || null,
       },
-      order ? "Customer found" : "No customer found"
+      customer ? "Customer found" : "No customer found"
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkCustomerByName = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { name } = req.params; // Get name from URL params instead of query
+
+    if (!name?.trim()) {
+      throw new ApiError(400, "Customer name is required in URL parameters");
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: {
+        name: {
+          contains: name.trim(),
+          mode: "insensitive",
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    successResponse(
+      res,
+      200,
+      {
+        exists: !!customer,
+        customer: customer || null,
+      },
+      customer ? "Customer found" : "No customer found"
     );
   } catch (error) {
     next(error);
@@ -85,65 +113,119 @@ export const createOrder = async (
       remarks,
     } = req.body;
 
-    if (!customerName || !items?.length) {
-      throw new ApiError(400, "Customer name and items are required");
+    // Validate required fields
+    if (!customerName?.trim()) {
+      throw new ApiError(400, "Customer name is required");
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new ApiError(400, "At least one order item is required");
     }
 
+    // Clean phone numbers
+    const cleanCustomerPhone = customerPhone?.replace(/\D/g, "") || null;
+    const cleanTransportPhone = transportPhone?.replace(/\D/g, "") || null;
+
+    // Check if customer exists
+    let customer = await prisma.customer.findFirst({
+      where: {
+        OR: [
+          { name: customerName.trim() },
+          ...(cleanCustomerPhone
+            ? [{ customerPhone: cleanCustomerPhone }]
+            : []),
+        ],
+      },
+    });
+
+    // Create or update customer
+    if (!customer) {
+      customer = await prisma.customer.create({
+        data: {
+          name: customerName.trim(),
+          customerPhone: cleanCustomerPhone,
+          customerAddress: customerAddress?.trim(),
+        },
+      });
+    } else if (
+      customerAddress &&
+      customer.customerAddress !== customerAddress.trim()
+    ) {
+      customer = await prisma.customer.update({
+        where: { id: customer.id },
+        data: { customerAddress: customerAddress.trim() },
+      });
+    }
+
+    // Generate order ID
     const today = new Date();
     const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, "");
     const lastOrder = await prisma.order.findFirst({
       where: { orderId: { startsWith: `ORD-${datePrefix}` } },
       orderBy: { orderId: "desc" },
+      select: { orderId: true },
     });
 
-    const nextSeq = lastOrder
-      ? parseInt(lastOrder.orderId.split("-")[2]) + 1
-      : 1;
+    const lastSeq = lastOrder?.orderId.split("-")[2];
+    const nextSeq = lastSeq ? parseInt(lastSeq) + 1 : 1;
     const orderId = `ORD-${datePrefix}-${nextSeq.toString().padStart(3, "0")}`;
 
+    // Validate and prepare order items
     const orderItems = items.map((item: any) => {
-      // Calculate total price if unitPrice is provided, otherwise use 0
-      const unitPrice = item.unitPrice || 0;
-      const total = unitPrice * (item.quantity || 1);
+      if (!item.itemName?.trim()) {
+        throw new ApiError(400, "Item name is required for all order items");
+      }
+      if (!item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
+        throw new ApiError(400, "Valid quantity is required for all items");
+      }
+
+      const unitPrice = parseFloat(item.unitPrice) || 0;
+      const quantity = parseInt(item.quantity);
+      const total = unitPrice * quantity;
 
       return {
-        itemName: item.itemName,
-        colorTop: item.colorTop,
-        colorBottom: item.colorBottom,
-        length: item.length,
-        width: item.width,
-        gsm: item.gsm || 0,
-        weight: item.weight,
-        quantity: item.quantity || 1,
-        unit: item.unit || "units",
-        unitPrice: unitPrice,
-        total: total,
-        variant: item.variant,
+        itemName: item.itemName.trim(),
+        colorTop: item.colorTop?.trim(),
+        colorBottom: item.colorBottom?.trim(),
+        length: parseFloat(item.length) || 0,
+        width: parseFloat(item.width) || 0,
+        gsm: parseInt(item.gsm) || 0,
+        weight: parseFloat(item.weight) || null,
+        quantity,
+        unit: item.unit?.trim() || "units",
+        unitPrice,
+        total,
+        variant: item.variant?.trim(),
       };
     });
 
-    const total = orderItems.reduce(
-      (sum: number, item: any) => sum + item.total,
-      0
-    );
+    const total = orderItems.reduce((sum, item) => sum + item.total, 0);
 
+    // Create order
     const order = await prisma.order.create({
       data: {
         orderId,
-        customer: customerName,
-        customerPhone: customerPhone?.replace(/\D/g, ""),
-        customerAddress,
-        salesPerson,
+        customerId: customer.id,
+        salesPerson: salesPerson?.trim(),
         deliveryMethod,
-        transportName,
-        transportPhone: transportPhone?.replace(/\D/g, ""),
+        transportName: transportName?.trim(),
+        transportPhone: cleanTransportPhone,
         total,
-        remarks,
+        remarks: remarks?.trim(),
         items: {
           create: orderItems,
         },
       },
-      include: { items: true },
+      include: {
+        items: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            customerPhone: true,
+            customerAddress: true,
+          },
+        },
+      },
     });
 
     successResponse(
@@ -151,11 +233,7 @@ export const createOrder = async (
       201,
       {
         orderId: order.orderId,
-        customer: {
-          name: order.customer,
-          phone: order.customerPhone,
-          address: order.customerAddress,
-        },
+        customer,
         items: order.items,
         total: order.total,
         status: "PENDING",
@@ -176,26 +254,24 @@ export const getOrders = async (
     const { status, search, page = 1, limit = 10 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: any = {};
-    if (status) where.status = status;
+    const where: Prisma.OrderWhereInput = {};
+    if (status) where.status = status as OrderStatus;
     if (search) {
       where.OR = [
+        { orderId: { contains: search as string, mode: "insensitive" } },
         {
-          orderId: {
-            contains: search as string,
-            mode: "insensitive" as Prisma.QueryMode,
+          customer: {
+            is: { name: { contains: search as string, mode: "insensitive" } },
           },
         },
         {
           customer: {
-            contains: search as string,
-            mode: "insensitive" as Prisma.QueryMode,
-          },
-        },
-        {
-          customerPhone: {
-            contains: search as string,
-            mode: "insensitive" as Prisma.QueryMode,
+            is: {
+              customerPhone: {
+                contains: search as string,
+                mode: "insensitive",
+              },
+            },
           },
         },
       ];
@@ -204,34 +280,29 @@ export const getOrders = async (
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
-        include: {
-          items: true,
-          dispatch: true,
-        },
-        orderBy: { date: "desc" },
+        include: { items: true, dispatch: true, customer: true },
+        orderBy: { createdAt: "desc" },
         skip,
         take: Number(limit),
       }),
       prisma.order.count({ where }),
     ]);
 
-    const formattedOrders = orders.map((order) => ({
-      id: order.id,
-      orderId: order.orderId,
-      customer: order.customer,
-      phone: order.customerPhone,
-      date: order.date.toISOString().split("T")[0],
-      status: order.status,
-      product: order.items.length > 0 ? "Custom product" : "No items",
-      total: order.total,
-      trackingId: order.dispatch?.trackingId,
-    }));
-
     successResponse(
       res,
       200,
       {
-        orders: formattedOrders,
+        orders: orders.map((order) => ({
+          id: order.id,
+          orderId: order.orderId,
+          customer: order.customer?.name,
+          date: order.createdAt.toISOString().split("T")[0],
+          status: order.status,
+          product:
+            order.items.length > 0 ? order.items[0].itemName : "No items",
+          total: order.total,
+          trackingId: order.dispatch?.trackingId,
+        })),
         pagination: {
           total,
           page: Number(page),
@@ -268,6 +339,7 @@ export const getOrderBook = async (
         include: {
           items: true,
           dispatch: true,
+          customer: true,
         },
         orderBy: { date: "desc" },
         skip,
@@ -287,7 +359,7 @@ export const getOrderBook = async (
     const formattedOrders = orders.map((order) => ({
       id: order.id,
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
       product: order.items.length > 0 ? "Custom product" : "No items",
@@ -335,6 +407,7 @@ export const getOrderDetails = async (
         items: true,
         dispatch: true,
         ProductionBatch: true,
+        customer: true,
       },
     });
 
@@ -343,9 +416,9 @@ export const getOrderDetails = async (
     const response = {
       orderId: order.orderId,
       customer: {
-        name: order.customer,
-        phone: order.customerPhone,
-        address: order.customerAddress,
+        name: order.customer?.name,
+        phone: order.customer?.customerPhone,
+        address: order.customer?.customerAddress,
       },
       orderInfo: {
         date: order.date.toISOString(),
@@ -392,7 +465,7 @@ export const updateOrderStatus = async (
     const { id } = req.params;
     const { status } = req.body;
 
-    const validStatuses: OrderStatus[] = [
+    const validStatuses = [
       "PENDING",
       "PROCESSING",
       "IN_PRODUCTION",
@@ -402,10 +475,8 @@ export const updateOrderStatus = async (
       "CANCELLED",
       "DELAYED",
     ];
-
-    if (!validStatuses.includes(status)) {
+    if (!validStatuses.includes(status))
       throw new ApiError(400, "Invalid status value");
-    }
 
     const updatedOrder = await prisma.order.update({
       where: { id },
@@ -418,7 +489,6 @@ export const updateOrderStatus = async (
       {
         orderId: updatedOrder.orderId,
         status: updatedOrder.status,
-        customer: updatedOrder.customer,
       },
       "Order status updated"
     );
@@ -510,7 +580,7 @@ export const getPendingOrders = async (
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: { status: "PENDING" },
-        include: { items: true },
+        include: { items: true, customer: true },
         orderBy: { date: "desc" },
         skip,
         take: Number(limit),
@@ -520,7 +590,7 @@ export const getPendingOrders = async (
 
     const formattedOrders = orders.map((order) => ({
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
@@ -560,6 +630,7 @@ export const getDispatchedOrders = async (
         include: {
           items: true,
           dispatch: true,
+          customer: true,
         },
         orderBy: { date: "desc" },
         skip,
@@ -572,7 +643,7 @@ export const getDispatchedOrders = async (
 
     const formattedOrders = orders.map((order) => ({
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
@@ -611,7 +682,7 @@ export const getCancelledOrders = async (
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: { status: "CANCELLED" },
-        include: { items: true },
+        include: { items: true, customer: true },
         orderBy: { date: "desc" },
         skip,
         take: Number(limit),
@@ -621,7 +692,7 @@ export const getCancelledOrders = async (
 
     const formattedOrders = orders.map((order) => ({
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
@@ -667,8 +738,12 @@ export const filterOrders = async (
     if (status) where.status = status;
     if (customer)
       where.customer = {
-        contains: customer as string,
-        mode: "insensitive" as Prisma.QueryMode,
+        is: {
+          name: {
+            contains: customer as string,
+            mode: "insensitive" as Prisma.QueryMode,
+          },
+        },
       };
     if (product) {
       where.items = {
@@ -696,6 +771,7 @@ export const filterOrders = async (
         include: {
           items: true,
           dispatch: true,
+          customer: true,
         },
         orderBy: { date: "desc" },
         skip,
@@ -706,7 +782,7 @@ export const filterOrders = async (
 
     const formattedOrders = orders.map((order) => ({
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
       products: order.items.length > 0 ? "Custom product" : "No items",
@@ -761,8 +837,12 @@ export const filterOrderBook = async (
         },
         {
           customer: {
-            contains: search as string,
-            mode: "insensitive" as Prisma.QueryMode,
+            is: {
+              name: {
+                contains: search as string,
+                mode: "insensitive" as Prisma.QueryMode,
+              },
+            },
           },
         },
       ];
@@ -780,6 +860,7 @@ export const filterOrderBook = async (
         include: {
           items: true,
           dispatch: true,
+          customer: true,
         },
         orderBy: { date: "desc" },
         skip,
@@ -790,7 +871,7 @@ export const filterOrderBook = async (
 
     const formattedOrders = orders.map((order) => ({
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
       product: order.items.length > 0 ? "Custom product" : "No items",
@@ -828,7 +909,7 @@ export const searchOrders = async (
 
     if (!query) throw new ApiError(400, "Search query required");
 
-    const where = {
+    const where: Prisma.OrderWhereInput = {
       OR: [
         {
           orderId: {
@@ -838,14 +919,22 @@ export const searchOrders = async (
         },
         {
           customer: {
-            contains: query as string,
-            mode: "insensitive" as Prisma.QueryMode,
+            is: {
+              name: {
+                contains: query as string,
+                mode: "insensitive" as Prisma.QueryMode,
+              },
+            },
           },
         },
         {
-          customerPhone: {
-            contains: query as string,
-            mode: "insensitive" as Prisma.QueryMode,
+          customer: {
+            is: {
+              customerPhone: {
+                contains: query as string,
+                mode: "insensitive" as Prisma.QueryMode,
+              },
+            },
           },
         },
       ],
@@ -857,6 +946,7 @@ export const searchOrders = async (
         include: {
           items: true,
           dispatch: true,
+          customer: true,
         },
         orderBy: { date: "desc" },
         skip,
@@ -867,7 +957,7 @@ export const searchOrders = async (
 
     const formattedOrders = orders.map((order) => ({
       orderId: order.orderId,
-      customer: order.customer,
+      customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
       product: order.items.length > 0 ? "Custom product" : "No items",

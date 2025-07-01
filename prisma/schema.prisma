@@ -91,24 +91,37 @@ model ProductMaterial {
   @@map("product_materials")
 }
 
-model Order {
-  id              String            @id @default(cuid())
-  orderId         String            @unique
-  date            DateTime          @default(now())
-  status          OrderStatus       @default(PENDING)
-  total           Float
-  salesPerson     String?
-  deliveryMethod  DeliveryMethod?
-  carrier         String?
-  trackingId      String?
+model Customer {
+  id              String   @id @default(cuid())
+  name            String
   customerPhone   String?
   customerAddress String?
-  transportName   String?
-  transportPhone  String?
-  remarks         String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  customer        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  orders Order[]
+
+  @@map("customers")
+}
+
+model Order {
+  id             String          @id @default(cuid())
+  orderId        String          @unique
+  date           DateTime        @default(now())
+  status         OrderStatus     @default(PENDING)
+  total          Float
+  salesPerson    String?
+  deliveryMethod DeliveryMethod?
+  carrier        String?
+  trackingId     String?
+  transportName  String?
+  transportPhone String?
+  remarks        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  customerId     String?
+
+  customer        Customer?         @relation(fields: [customerId], references: [id])
   items           OrderItem[]
   dispatch        Dispatch?
   ProductionBatch ProductionBatch[]

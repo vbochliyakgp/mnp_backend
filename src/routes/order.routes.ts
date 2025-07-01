@@ -13,6 +13,7 @@ import {
   filterOrders,
   filterOrderBook,
   searchOrders,
+  checkCustomerByName,
 } from "../controllers/order.controller";
 
 const router = express.Router();
@@ -35,8 +36,9 @@ router.get("/filter", filterOrders);
 router.get("/filter/book", filterOrderBook);
 router.get("/search", searchOrders);
 
-// WhatsApp integration routes
+// routes for checking name and number
 
 router.get("/customer/:whatsapp", getCustomerByWhatsApp);
+router.get("/customer/check-name", checkCustomerByName);
 
 export default router;
