@@ -39,6 +39,6 @@ router.get("/search", searchOrders);
 // routes for checking name and number
 
 router.get("/customer/:whatsapp", getCustomerByWhatsApp);
-router.get("/customer/check-name", checkCustomerByName);
+router.get("/customer/check-name/:name", checkCustomerByName);
 
 export default router;
