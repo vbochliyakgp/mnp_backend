@@ -125,20 +125,15 @@ export const createOrder = async (
       throw new ApiError(400, "At least one order item is required");
     }
 
+    const { id } = req.params;
+
     // Clean phone numbers
     const cleanCustomerPhone = customerPhone?.replace(/\D/g, "") || null;
     const cleanTransportPhone = transportPhone?.replace(/\D/g, "") || null;
 
     // Check if customer exists
-    let customer = await prisma.customer.findFirst({
-      where: {
-        OR: [
-          { name: customerName.trim() },
-          ...(cleanCustomerPhone
-            ? [{ customerPhone: cleanCustomerPhone }]
-            : []),
-        ],
-      },
+    let customer = await prisma.customer.findUnique({
+      where: { id },
     });
 
     // Create or update customer
