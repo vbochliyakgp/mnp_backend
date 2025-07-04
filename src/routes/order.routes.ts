@@ -14,6 +14,8 @@ import {
   filterOrderBook,
   searchOrders,
   checkCustomerByName,
+  updateItem,
+  deleteItem
 } from "../controllers/order.controller";
 
 const router = express.Router();
@@ -40,5 +42,10 @@ router.get("/search", searchOrders);
 
 router.get("/customer/:whatsapp", getCustomerByWhatsApp);
 router.get("/customer/check-name/:name", checkCustomerByName);
+
+// update and delete item
+router.patch('/item/:itemId', updateItem);
+router.delete('/item/:itemId', deleteItem);
+
 
 export default router;

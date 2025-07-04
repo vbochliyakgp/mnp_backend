@@ -125,19 +125,18 @@ export const createOrder = async (
       throw new ApiError(400, "At least one order item is required");
     }
 
-
     // Clean phone numbers
     const cleanCustomerPhone = customerWhatsapp?.replace(/\D/g, "") || null;
     const cleanTransportPhone = transportContact?.replace(/\D/g, "") || null;
 
-    const  id  = req.body.customerId;
+    const id = req.body.customerId;
     console.log("Customer ID from request body:", id);
     let customer = null;
     if (id) {
       // Check if customer exists
-     customer = await prisma.customer.findUnique({
-      where: { id },
-    });
+      customer = await prisma.customer.findUnique({
+        where: { id },
+      });
     }
 
     console.log("Customer :", customer);
@@ -301,10 +300,12 @@ export const getOrders = async (
           id: order.id,
           orderId: order.orderId,
           customer: order.customer?.name,
-          date: order.createdAt.toISOString().split("T")[0],
+          date: order.createdAt.toISOString(),
           status: order.status,
           product:
-            order.items.length > 0 ? order.items[0].itemName : "No items",
+            order.items.length > 0
+              ? order.items.map((item) => item.itemName).join(", ")
+              : "No items",
           total: order.total,
           trackingId: order.dispatch?.trackingId,
         })),
@@ -405,9 +406,12 @@ export const getOrderDetails = async (
 ) => {
   try {
     const { id } = req.params;
+    console.log("Kumman 1");
 
-    const order = await prisma.order.findUnique({
-      where: { id },
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [{ orderId: id }, { id: id }],
+      },
       include: {
         items: true,
         dispatch: true,
@@ -434,7 +438,9 @@ export const getOrderDetails = async (
         transportPhone: order.transportPhone,
         remarks: order.remarks,
       },
+      
       products: order.items.map((item: any) => ({
+        itemName: item.itemName,
         id: item.id,
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
@@ -446,6 +452,11 @@ export const getOrderDetails = async (
         unitPrice: item.unitPrice,
         total: item.total,
         variant: item.variant,
+        orderId: item.orderId,
+        gsm: item.gsm,
+        category: item.category,
+        piecesPerBundle: item.piecesPerBundle,
+
       })),
       dispatch: order.dispatch,
       productions: order.ProductionBatch,
@@ -984,6 +995,73 @@ export const searchOrders = async (
       },
       "Search results retrieved"
     );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateItem = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { itemId } = req.params;
+    const itemData = req.body;
+    console.log(itemData);
+    const data = {
+      itemName: itemData.itemName?.trim(),
+      colorTop: itemData.colorTop?.trim(),
+      colorBottom: itemData.colorBottom?.trim(),
+      length: parseFloat(itemData.length) || 0,
+      width: parseFloat(itemData.width) || 0,
+      gsm: parseInt(itemData.gsm) || 0,
+      quantity: parseInt(itemData.quantity) || 1,
+      unit: itemData.unit?.trim() || "units",
+      unitPrice: parseFloat(itemData.unitPrice) || 0,
+      total: parseFloat(itemData.total) || 0,
+      variant: itemData.variant?.trim(),
+    };
+    const existingItem = await prisma.orderItem.findUnique({
+      where: { id: itemId },
+    });
+
+    if (!existingItem) {
+      throw new ApiError(404, "Order item not found");
+    }
+
+    const updatedItem = await prisma.orderItem.update({
+      where: { id: itemId },
+      data: data,
+    });
+
+    successResponse(res, 200, updatedItem, "Order item updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteItem = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { itemId } = req.params;
+
+    const item = await prisma.orderItem.findUnique({
+      where: { id: itemId },
+    });
+
+    if (!item) {
+      throw new ApiError(404, "Order item not found");
+    }
+
+    await prisma.orderItem.delete({
+      where: { id: itemId },
+    });
+
+    successResponse(res, 200, null, "Order item deleted successfully");
   } catch (error) {
     next(error);
   }
