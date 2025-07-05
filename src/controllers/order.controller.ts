@@ -1021,6 +1021,7 @@ export const updateItem = async (
       unitPrice: parseFloat(itemData.unitPrice) || 0,
       total: parseFloat(itemData.total) || 0,
       variant: itemData.variant?.trim(),
+      category: itemData.category?.trim(),
     };
     const existingItem = await prisma.orderItem.findUnique({
       where: { id: itemId },
