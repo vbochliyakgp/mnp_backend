@@ -9,7 +9,7 @@ export const createProduct = async (
   next: NextFunction
 ) => {
   try {
-    const { itemId, name, category, materials } = req.body;
+    const { itemId, name, category, materials, rollType } = req.body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { itemId },
@@ -22,6 +22,7 @@ export const createProduct = async (
     const product = await prisma.product.create({
       data: {
         itemId,
+        rollType,
         name,
         type: "ROLL",
         gsm: 0,
