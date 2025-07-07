@@ -68,6 +68,8 @@ model Product {
   isTopSelling    Boolean     @default(false)
   unitsSold       Int         @default(0)
   remarks         String?
+  rollType        String
+  rollNumber      Int?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -149,6 +151,7 @@ model OrderItem {
   rollType        String
   rollNumber      Int?
   remarks         String?
+  type           ProductType @default(ROLL)
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
