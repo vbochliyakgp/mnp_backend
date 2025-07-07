@@ -361,14 +361,15 @@ export const getOrderBook = async (
       prisma.order.count({ where: { status: "SHIPPED" } }),
       prisma.order.count({ where: { status: "DELIVERED" } }),
     ]);
-
     const formattedOrders = orders.map((order) => ({
       id: order.id,
       orderId: order.orderId,
       customer: order.customer?.name,
       date: order.date.toISOString().split("T")[0],
       status: order.status,
-      product: order.items.length > 0 ? "Custom product" : "No items",
+      product: order.items.length > 0
+        ? order.items.map((item) => item.itemName).join(", ")
+        : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
     }));
