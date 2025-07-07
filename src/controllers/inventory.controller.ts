@@ -115,10 +115,12 @@ export const addFinishedProduct = async (
       piecesPerBundle,
       variant,
       remarks,
+      rollType,
+      rollNumber,
     } = req.body;
 
-    if (!type || !name || !quantity) {
-      throw new ApiError(400, "Type, name, and quantity are required");
+    if (!type || !name || !quantity || !rollType) {
+      throw new ApiError(400, "Type, name, quantity, and rollType are required");
     }
 
     // Generate item ID
@@ -150,6 +152,8 @@ export const addFinishedProduct = async (
       productData.width = width ? parseFloat(width) : null;
       productData.length = length ? parseFloat(length) : null;
       productData.weight = weight ? parseFloat(weight) : null;
+      productData.rollType = rollType || null;
+      productData.rollNumber = rollNumber ? parseInt(rollNumber) : null;
       productData.unit = "rolls";
     } else if (type === "BUNDLE") {
       productData.width = width ? parseFloat(width) : null;
@@ -336,6 +340,9 @@ export const getFinishedProducts = async (
           piecesPerBundle: true,
           variant: true,
           createdAt: true,
+          remarks: true,
+          rollType: true,
+          rollNumber: true
         },
       }),
       prisma.product.count({ where }),

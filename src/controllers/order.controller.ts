@@ -212,6 +212,7 @@ export const createOrder = async (
         total,
         variant: item.variant?.trim(),
         remarks : item.remarks?.trim() || null,
+        type: item.type
       };
     });
 
@@ -486,6 +487,9 @@ export const getOrderDetails = async (
         category: item.category,
         piecesPerBundle: item.piecesPerBundle,
         remarks: item.remarks || null,
+        type: item.type,
+        rollNumber: item.rollNumber,
+        rollType: item.rollType
 
       })),
       dispatch: order.dispatch,
@@ -572,7 +576,9 @@ export const updateOrderProducts = async (
         unitPrice: unitPrice,
         total: total,
         variant: item.variant,
-        remarks:item.remarks
+        remarks:item.remarks,
+        rollType: item.rollType,
+        rollNumber: item.rollNumber
       };
     });
 
@@ -1053,7 +1059,9 @@ export const updateItem = async (
       total: parseFloat(itemData.total) || 0,
       variant: itemData.variant?.trim(),
       category: itemData.category?.trim(),
-      remarks: itemData.remarks?.trim()
+      remarks: itemData.remarks?.trim(),
+      rollType: itemData.rollType?.trim(),
+      rollNumber: itemData.rollNumber?.trim()
     };
     const existingItem = await prisma.orderItem.findUnique({
       where: { id: itemId },
