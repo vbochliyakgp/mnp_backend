@@ -146,6 +146,9 @@ model OrderItem {
   unitPrice       Float
   total           Float
   variant         String?
+  rollType        String
+  rollNumber      Int?
+  remarks         String?
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

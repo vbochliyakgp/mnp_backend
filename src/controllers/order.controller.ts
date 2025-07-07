@@ -117,6 +117,8 @@ export const createOrder = async (
       mainRemark,
     } = req.body;
 
+    console.log("Request body:", req.body);
+
     // Validate required fields
     if (!customerName?.trim()) {
       throw new ApiError(400, "Customer name is required");
@@ -178,9 +180,16 @@ export const createOrder = async (
       if (!item.itemName?.trim()) {
         throw new ApiError(400, "Item name is required for all order items");
       }
+      if (!item.rollType?.trim()) {
+        throw new ApiError(400, "Roll type is required for all order items");
+      }
+      if (!item.category?.trim()) {
+        throw new ApiError(400, "Category is required for all order items");
+      }
       if (!item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
         throw new ApiError(400, "Valid quantity is required for all items");
       }
+
 
       const unitPrice = parseFloat(item.unitPrice) || 0;
       const quantity = parseInt(item.quantity);
@@ -188,6 +197,9 @@ export const createOrder = async (
 
       return {
         itemName: item.itemName.trim(),
+        rollType: item.rollType?.trim(),
+        rollNumber: item.rollNumber ? parseInt(item.rollNumber) : null,
+        category: item.category?.trim(),
         colorTop: item.colorTop?.trim(),
         colorBottom: item.colorBottom?.trim(),
         length: parseFloat(item.length) || 0,
@@ -199,6 +211,7 @@ export const createOrder = async (
         unitPrice,
         total,
         variant: item.variant?.trim(),
+        remarks : item.remarks?.trim() || null,
       };
     });
 
@@ -300,7 +313,13 @@ export const getOrders = async (
           id: order.id,
           orderId: order.orderId,
           customer: order.customer?.name,
+          customerPhone: order.customer?.customerPhone,
+          customerAddress: order.customer?.customerAddress,
           date: order.createdAt.toISOString(),
+          dueDate: order.date,
+          deliveryMethod: order?.deliveryMethod,
+          transportName: order?.transportName,
+          transportPhone: order?.transportPhone,
           status: order.status,
           product:
             order.items.length > 0
@@ -308,6 +327,8 @@ export const getOrders = async (
               : "No items",
           total: order.total,
           trackingId: order.dispatch?.trackingId,
+          remarks: order.remarks,
+          salesPerson: order.salesPerson,
         })),
         pagination: {
           total,
@@ -366,11 +387,20 @@ export const getOrderBook = async (
       id: order.id,
       orderId: order.orderId,
       customer: order.customer?.name,
+      customerPhone: order.customer?.customerPhone,
+      customerAddress: order.customer?.customerAddress,
       date: order.date.toISOString().split("T")[0],
+      dueDate: order.date.toISOString(),
       status: order.status,
       product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       trackingId: order.dispatch?.trackingId,
+      remarks: order.remarks,
+      salesPerson: order?.salesPerson,
+      deliveryMethod: order?.deliveryMethod,
+      transportName: order?.transportName,
+      transportPhone: order?.transportPhone,
+
     }));
 
     successResponse(
@@ -406,7 +436,6 @@ export const getOrderDetails = async (
 ) => {
   try {
     const { id } = req.params;
-    console.log("Kumman 1");
 
     const order = await prisma.order.findFirst({
       where: {
@@ -456,6 +485,7 @@ export const getOrderDetails = async (
         gsm: item.gsm,
         category: item.category,
         piecesPerBundle: item.piecesPerBundle,
+        remarks: item.remarks || null,
 
       })),
       dispatch: order.dispatch,
@@ -542,6 +572,7 @@ export const updateOrderProducts = async (
         unitPrice: unitPrice,
         total: total,
         variant: item.variant,
+        remarks:item.remarks
       };
     });
 
@@ -1022,6 +1053,7 @@ export const updateItem = async (
       total: parseFloat(itemData.total) || 0,
       variant: itemData.variant?.trim(),
       category: itemData.category?.trim(),
+      remarks: itemData.remarks?.trim()
     };
     const existingItem = await prisma.orderItem.findUnique({
       where: { id: itemId },
