@@ -24,7 +24,7 @@ export const createDispatch = async (
       packageDetails,
       remarks,
     } = req.body;
-    
+
     console.log("Dispatch data:", req.body);
 
     // Validate required fields
@@ -50,10 +50,6 @@ export const createDispatch = async (
       throw new ApiError(404, "Order not found");
     }
 
-    // if (order.dispatch) {
-    //   throw new ApiError(400, "Order already has a dispatch record");
-    // }
-
     // Generate dispatch ID
     const lastDispatch = await prisma.dispatch.findFirst({
       orderBy: { dispatchId: "desc" },
@@ -67,13 +63,13 @@ export const createDispatch = async (
     const packageDetailsString = packageDetails
       .map((item: any) => {
         if (item.type === "ROLL") {
-          return `${item.itemName || "N/A"}-${item.rollType || "N/A"}-${item.rollNumber || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.width || "N/A"} (Qty: ${item.quantity || 0})`;
+          return `${item.itemName || "N/A"}-${item.rollType || "N/A"}-${item.rollNumber || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.width || "N/A"} (Qty: ${item.deliveredQuantity || 0})`;
         }
-        return `${item.itemName || "N/A"}-${item.gsm || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.length || "N/A"}-${item.width || "N/A"} (Qty: ${item.quantity || 0})`;
+        return `${item.itemName || "N/A"}-${item.gsm || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.length || "N/A"}-${item.width || "N/A"} (Qty: ${item.deliveredQuantity || 0})`;
       })
       .join(", ");
 
-    // Calculate total amount from packageDetails with proper TypeScript types
+    // Calculate total amount from packageDetails
     const totalAmount = packageDetails.reduce((sum: number, item: any) => {
       const itemAmount =
         (Number(item.rate) || 0) *
@@ -82,75 +78,94 @@ export const createDispatch = async (
       return sum + itemAmount;
     }, 0);
 
-    // Create dispatch with transaction for data consistency
-    const dispatch = await prisma.$transaction(async (prisma) => {
-      // Create dispatch record
-      const newDispatch = await prisma.dispatch.create({
-        data: {
-          dispatchId,
-          orderId: order.id,
-          customer,
-          loadingDate: loadingDate ? new Date(loadingDate) : null,
-          driverName,
-          shippingAddress,
-          carNumber,
-          driverNumber,
-          carrier,
-          transportation,
-          packageDetails: packageDetailsString,
-          remarks,
-          status: "READY_FOR_PICKUP",
-          totalAmount,
-          itemDetails: packageDetails.map((item: any) => ({
-            deliveredQuantity: item.deliveredQuantity,
-            rate: item.rate,
-            metricValue: item.metricValue,
-            itemId: item.itemId,
-            unit: item.unit,
-            total:
-              (Number(item.rate) || 0) *
-              (Number(item.metricValue) || 0) *
-              (Number(item.deliveredQuantity) || 0),
-          })),
-        } as any,
-        include: {
-          order: true,
-        },
-      });
+    // TRANSACTION: Only critical operations that must be atomic
+    const dispatch = await prisma.$transaction(
+      async (prisma) => {
+        // Create dispatch record
+        const newDispatch = await prisma.dispatch.create({
+          data: {
+            dispatchId,
+            orderId: order.id,
+            customer,
+            loadingDate: loadingDate ? new Date(loadingDate) : null,
+            driverName,
+            shippingAddress,
+            carNumber,
+            driverNumber,
+            carrier,
+            transportation,
+            packageDetails: packageDetailsString,
+            remarks,
+            status: "READY_FOR_PICKUP",
+            totalAmount,
+            itemDetails: packageDetails.map((item: any) => ({
+              deliveredQuantity: item.deliveredQuantity,
+              rate: item.rate,
+              metricValue: item.metricValue,
+              itemId: item.itemId,
+              unit: item.unit,
+              total:
+                (Number(item.rate) || 0) *
+                (Number(item.metricValue) || 0) *
+                (Number(item.deliveredQuantity) || 0),
+            })),
+          } as any,
+          include: {
+            order: true,
+          },
+        });
 
-      // Update order status with calculated total
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          status: "SHIPPED",
-          total: order.total + totalAmount,
-        },
-      });
+        // Update order status with calculated total
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: "SHIPPED",
+            total: order.total + totalAmount,
+          },
+        });
 
-      await Promise.all(
-        packageDetails.map(async (item: any) => {
-          if (item.itemId && item.deliveredQuantity) {
-            const currentOrderItem = await prisma.orderItem.findUnique({
-              where: { id: item.itemId },
-              select: { quantity: true },
-            });
+        // Update order item quantities
+        await Promise.all(
+          packageDetails.map(async (item: any) => {
+            if (item.id && item.deliveredQuantity) {
+              try {
+                const currentOrderItem = await prisma.orderItem.findFirst({
+                  where: { 
+                    id: item.id,
+                    orderId: order.id // Ensure it belongs to this order
+                  },
+                  select: { quantity: true, id: true, itemName: true },
+                });
 
-            if (currentOrderItem) {
-              const newQuantity = Math.max(
-                0,
-                currentOrderItem.quantity - Number(item.deliveredQuantity)
-              );
+                if (currentOrderItem) {
+                  const newQuantity = Math.max(
+                    0,
+                    currentOrderItem.quantity - Number(item.deliveredQuantity)
+                  );
 
-              await prisma.orderItem.update({
-                where: { id: item.itemId },
-                data: { quantity: newQuantity },
-              });
+                  console.log(`Updating ${currentOrderItem.itemName}: ${currentOrderItem.quantity} - ${item.deliveredQuantity} = ${newQuantity}`);
+
+                  await prisma.orderItem.update({
+                    where: { id: item.id },
+                    data: { quantity: newQuantity },
+                  });
+                }
+              } catch (error) {
+                console.error(`Error updating order item ${item.id}:`, error);
+              }
             }
-          }
-        })
-      );
+          })
+        );
 
-      // Update product stock in parallel
+        return newDispatch;
+      },
+      {
+        timeout: 10000, // Increased timeout to 10 seconds as fallback
+      }
+    );
+
+    // OUTSIDE TRANSACTION: Update product stock (independent operations)
+    try {
       await Promise.all(
         packageDetails.map(async (item: any) => {
           const {
@@ -167,9 +182,7 @@ export const createDispatch = async (
           } = item;
 
           // Parse values once
-          const parsedRollNumber = rollNumber
-            ? parseInt(rollNumber)
-            : undefined;
+          const parsedRollNumber = rollNumber ? parseInt(rollNumber) : undefined;
           const parsedGsm = gsm ? parseInt(gsm) : undefined;
           const parsedLength = length ? parseFloat(length) : undefined;
           const parsedWidth = width ? parseFloat(width) : undefined;
@@ -208,10 +221,9 @@ export const createDispatch = async (
           }
 
           if (existingProduct) {
-            const newStock = Math.max(
-              0,
-              existingProduct.stock - parsedQuantity
-            );
+            const newStock = Math.max(0, existingProduct.stock - parsedQuantity);
+            console.log(`Updating product ${itemName} stock: ${existingProduct.stock} - ${parsedQuantity} = ${newStock}`);
+            
             await prisma.product.update({
               where: { id: existingProduct.id },
               data: {
@@ -222,9 +234,10 @@ export const createDispatch = async (
           }
         })
       );
-
-      return newDispatch;
-    });
+    } catch (error) {
+      console.error("Error updating product stock:", error);
+      // Product stock update failure doesn't affect dispatch creation
+    }
 
     console.log("Dispatch created:", dispatch);
     successResponse(res, 201, dispatch, "Dispatch created successfully");
@@ -233,6 +246,7 @@ export const createDispatch = async (
     next(error);
   }
 };
+
 
 export const getTodayDispatches = async (
   req: Request,
