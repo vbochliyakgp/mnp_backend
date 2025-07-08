@@ -120,18 +120,61 @@ export const addFinishedProduct = async (
     } = req.body;
 
     if (!type || !name || !quantity) {
-      throw new ApiError(400, "Type, name, quantity, and rollType are required");
+      throw new ApiError(400, "Type, name, and quantity are required");
     }
 
-    // Generate item ID
+    const parsedQuantity = parseInt(quantity);
+
+    let existingProduct;
+
+    if (type === "ROLL") {
+      existingProduct = await prisma.product.findFirst({
+        where: {
+          name,
+          type,
+          rollType,
+          rollNumber: rollNumber ? parseInt(rollNumber) : undefined,
+          gsm: gsm ? parseInt(gsm) : undefined,
+          colorTop,
+          colorBottom,
+          width: width ? parseFloat(width) : undefined,
+        },
+      });
+    } else if (type === "BUNDLE") {
+      existingProduct = await prisma.product.findFirst({
+        where: {
+          name,
+          type,
+          gsm: gsm ? parseInt(gsm) : undefined,
+          colorTop,
+          colorBottom,
+          length: length ? parseFloat(length) : undefined,
+          width: width ? parseFloat(width) : undefined,
+        },
+      });
+    }
+
+    if (existingProduct) {
+      const updatedProduct = await prisma.product.update({
+        where: { id: existingProduct.id },
+        data: {
+          stock: existingProduct.stock + parsedQuantity,
+          status: existingProduct.stock + parsedQuantity > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+        },
+      });
+      return successResponse(res, 200, updatedProduct, "Product stock updated successfully");
+    }
+
     const prefix = type === "ROLL" ? "TR" : "TB";
     const lastProduct = await prisma.product.findFirst({
       where: { itemId: { startsWith: prefix } },
       orderBy: { itemId: "desc" },
     });
+
     const nextId = lastProduct
       ? parseInt(lastProduct.itemId.replace(prefix, "")) + 1
       : 1;
+
     const itemId = `${prefix}${nextId.toString().padStart(3, "0")}`;
 
     const productData: any = {
@@ -142,38 +185,39 @@ export const addFinishedProduct = async (
       gsm: gsm ? parseInt(gsm) : 0,
       colorTop: colorTop || null,
       colorBottom: colorBottom || null,
-      stock: parseInt(quantity),
-      status: parseInt(quantity) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+      stock: parsedQuantity,
+      status: parsedQuantity > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
       variant: variant || null,
       remarks: remarks || null,
     };
 
     if (type === "ROLL") {
-      productData.width = width ? parseFloat(width) : null;
-      productData.length = length ? parseFloat(length) : null;
-      productData.weight = weight ? parseFloat(weight) : null;
-      productData.rollType = rollType || null;
-      productData.rollNumber = rollNumber ? parseInt(rollNumber) : null;
-      productData.unit = "rolls";
+      Object.assign(productData, {
+        width: width ? parseFloat(width) : null,
+        length: length ? parseFloat(length) : null,
+        weight: weight ? parseFloat(weight) : null,
+        rollType: rollType || null,
+        rollNumber: rollNumber ? parseInt(rollNumber) : null,
+        unit: "rolls",
+      });
     } else if (type === "BUNDLE") {
-      productData.width = width ? parseFloat(width) : null;
-      productData.length = length ? parseFloat(length) : null;
-      productData.weight = weight ? parseFloat(weight) : null;
-      productData.piecesPerBundle = piecesPerBundle
-        ? parseInt(piecesPerBundle)
-        : null;
-      productData.unit = "bundles";
+      Object.assign(productData, {
+        width: width ? parseFloat(width) : null,
+        length: length ? parseFloat(length) : null,
+        weight: weight ? parseFloat(weight) : null,
+        piecesPerBundle: piecesPerBundle ? parseInt(piecesPerBundle) : null,
+        unit: "bundles",
+      });
     }
 
-    const product = await prisma.product.create({
-      data: productData,
-    });
+    const newProduct = await prisma.product.create({ data: productData });
 
-    successResponse(res, 201, product, "Finished product added successfully");
+    return successResponse(res, 201, newProduct, "Finished product added successfully");
   } catch (error) {
     next(error);
   }
 };
+
 
 export const generateInventoryReport = async (
   req: Request,

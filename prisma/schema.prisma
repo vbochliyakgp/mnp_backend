@@ -149,7 +149,7 @@ model OrderItem {
   total           Float
   variant         String?
   rollType        String?
-  rollNumber      Int?
+  rollNumber      String?
   remarks         String?
   type           ProductType @default(ROLL)
 
@@ -195,6 +195,7 @@ model Dispatch {
   remarks         String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+  totalAmount     Float
 
   order Order @relation(fields: [orderId], references: [id])
   user  User? @relation(fields: [userId], references: [id])

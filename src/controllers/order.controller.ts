@@ -195,7 +195,7 @@ export const createOrder = async (
       return {
         itemName: item.itemName.trim(),
         rollType: item.rollType?.trim(),
-        rollNumber: item.rollNumber ? parseInt(item.rollNumber) : null,
+        rollNumber: item.rollNumber ? String(item.rollNumber) : null,
         category: item.category?.trim(),
         colorTop: item.colorTop?.trim(),
         colorBottom: item.colorBottom?.trim(),
