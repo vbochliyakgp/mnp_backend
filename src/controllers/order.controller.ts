@@ -209,7 +209,8 @@ export const createOrder = async (
         total,
         variant: item.variant?.trim(),
         remarks : item.remarks?.trim() || null,
-        type: item.type
+        type: item.type,
+        piecesPerBundle: item.piecesPerBundle,
       };
     });
 
@@ -1060,6 +1061,7 @@ export const updateItem = async (
       remarks: itemData.remarks?.trim(),
       rollType: itemData.rollType?.trim(),
       rollNumber: itemData.rollNumber || null,
+      piecesPerBundle: itemData.piecesPerBundle,
     };
     const existingItem = await prisma.orderItem.findUnique({
       where: { id: itemId },
