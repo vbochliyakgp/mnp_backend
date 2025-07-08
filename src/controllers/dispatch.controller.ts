@@ -24,6 +24,7 @@ export const createDispatch = async (
       packageDetails,
       remarks,
     } = req.body;
+    
     console.log("Dispatch data:", req.body);
 
     // Validate required fields
@@ -32,6 +33,11 @@ export const createDispatch = async (
         400,
         "Order ID, customer, and shipping address are required"
       );
+    }
+
+    // Validate packageDetails array
+    if (!Array.isArray(packageDetails) || packageDetails.length === 0) {
+      throw new ApiError(400, "Package details are required");
     }
 
     // Check if order exists and is ready for dispatch
@@ -43,6 +49,7 @@ export const createDispatch = async (
     if (!order) {
       throw new ApiError(404, "Order not found");
     }
+
     if (order.dispatch) {
       throw new ApiError(400, "Order already has a dispatch record");
     }
@@ -56,39 +63,154 @@ export const createDispatch = async (
       : 1;
     const dispatchId = `DIS${nextId.toString().padStart(3, "0")}`;
 
-    // Create dispatch
-    const dispatch = await prisma.dispatch.create({
-      data: {
-        dispatchId,
-        orderId: order.id,
-        customer,
-        loadingDate: loadingDate ? new Date(loadingDate) : null,
-        driverName,
-        shippingAddress,
-        carNumber,
-        driverNumber,
-        carrier,
-        transportation,
-        packageDetails,
-        remarks,
-        status: "READY_FOR_PICKUP",
-      } as any,
-      include: {
-        order: true,
-      },
+    // Generate package details string
+    const packageDetailsString = packageDetails
+      .map((item: any) => {
+        if (item.type === "ROLL") {
+          return `${item.itemName || "N/A"}-${item.rollType || "N/A"}-${item.rollNumber || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.width || "N/A"} (Qty: ${item.quantity || 0})`;
+        }
+        return `${item.itemName || "N/A"}-${item.gsm || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.length || "N/A"}-${item.width || "N/A"} (Qty: ${item.quantity || 0})`;
+      })
+      .join(", ");
+
+    // Calculate total amount from packageDetails with proper TypeScript types
+    const totalAmount = packageDetails.reduce((sum: number, item: any) => {
+      const itemAmount =
+        (Number(item.rate) || 0) *
+        (Number(item.metricValue) || 0) *
+        (Number(item.deliveredQuantity) || 0);
+      return sum + itemAmount;
+    }, 0);
+
+    // Create dispatch with transaction for data consistency
+    const dispatch = await prisma.$transaction(async (prisma) => {
+      // Create dispatch record
+      const newDispatch = await prisma.dispatch.create({
+        data: {
+          dispatchId,
+          orderId: order.id,
+          customer,
+          loadingDate: loadingDate ? new Date(loadingDate) : null,
+          driverName,
+          shippingAddress,
+          carNumber,
+          driverNumber,
+          carrier,
+          transportation,
+          packageDetails: packageDetailsString,
+          remarks,
+          status: "READY_FOR_PICKUP",
+          totalAmount,
+        } as any,
+        include: {
+          order: true,
+        },
+      });
+
+      // Update order status with calculated total
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: "SHIPPED",
+          total: order.total + totalAmount,
+        },
+      });
+
+      // Update order items quantities in parallel
+      await Promise.all(
+        packageDetails.map(async (item: any) => {
+          if (item.itemId && item.deliveredQuantity) {
+            await prisma.orderItem.updateMany({
+              where: { id: item.itemId },
+              data: {
+                quantity: {
+                  decrement: Number(item.deliveredQuantity) || 0,
+                },
+              },
+            });
+          }
+        })
+      );
+
+      // Update product stock in parallel
+      await Promise.all(
+        packageDetails.map(async (item: any) => {
+          const {
+            itemName,
+            type,
+            rollType,
+            rollNumber,
+            gsm,
+            colorTop,
+            colorBottom,
+            length,
+            width,
+            deliveredQuantity,
+          } = item;
+
+          // Parse values once
+          const parsedRollNumber = rollNumber ? parseInt(rollNumber) : undefined;
+          const parsedGsm = gsm ? parseInt(gsm) : undefined;
+          const parsedLength = length ? parseFloat(length) : undefined;
+          const parsedWidth = width ? parseFloat(width) : undefined;
+          const parsedQuantity = Number(deliveredQuantity) || 0;
+
+          // Skip if no quantity to update
+          if (parsedQuantity <= 0) return;
+
+          let existingProduct;
+
+          if (type === "ROLL") {
+            existingProduct = await prisma.product.findFirst({
+              where: {
+                name: itemName,
+                type,
+                rollType,
+                rollNumber: parsedRollNumber,
+                gsm: parsedGsm,
+                colorTop,
+                colorBottom,
+                width: parsedWidth,
+              },
+            });
+          } else if (type === "BUNDLE") {
+            existingProduct = await prisma.product.findFirst({
+              where: {
+                name: itemName,
+                type,
+                gsm: parsedGsm,
+                colorTop,
+                colorBottom,
+                length: parsedLength,
+                width: parsedWidth,
+              },
+            });
+          }
+
+          if (existingProduct) {
+            const newStock = Math.max(0, existingProduct.stock - parsedQuantity);
+            await prisma.product.update({
+              where: { id: existingProduct.id },
+              data: {
+                stock: newStock,
+                status: newStock > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+              },
+            });
+          }
+        })
+      );
+
+      return newDispatch;
     });
 
-    // Update order status
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { status: "SHIPPED" },
-    });
-
+    console.log("Dispatch created:", dispatch);
     successResponse(res, 201, dispatch, "Dispatch created successfully");
   } catch (error) {
+    console.error("Error creating dispatch:", error);
     next(error);
   }
 };
+
 
 export const getTodayDispatches = async (
   req: Request,
