@@ -1056,6 +1056,7 @@ export const updateItem = async (
       rollType: itemData.rollType?.trim(),
       rollNumber: parseInt(itemData.rollNumber) || null,
       piecesPerBundle: itemData.piecesPerBundle,
+      weight: itemData.weight === "" ? null : parseFloat(itemData.weight),
     };
     const existingItem = await prisma.orderItem.findUnique({
       where: { id: itemId },

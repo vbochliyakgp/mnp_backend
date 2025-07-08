@@ -287,6 +287,7 @@ export const getAllDispatches = async (
         { dispatchId: { contains: search as string } },
         { order: { orderId: { contains: search as string } } },
         { customer: { contains: search as string } },
+        { carrier: { contains: search as string } }, // Added carrier search
       ];
     }
 
@@ -295,7 +296,7 @@ export const getAllDispatches = async (
         where,
         include: {
           order: {
-            select: { orderId: true },
+            include: { items: true },
           },
         },
         orderBy: { createdAt: "desc" },
