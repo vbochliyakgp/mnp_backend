@@ -119,7 +119,7 @@ export const addFinishedProduct = async (
       rollNumber,
     } = req.body;
 
-    if (!type || !name || !quantity || !rollType) {
+    if (!type || !name || !quantity) {
       throw new ApiError(400, "Type, name, quantity, and rollType are required");
     }
 

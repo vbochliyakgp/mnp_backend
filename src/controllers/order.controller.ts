@@ -180,9 +180,6 @@ export const createOrder = async (
       if (!item.itemName?.trim()) {
         throw new ApiError(400, "Item name is required for all order items");
       }
-      if (!item.rollType?.trim()) {
-        throw new ApiError(400, "Roll type is required for all order items");
-      }
       if (!item.category?.trim()) {
         throw new ApiError(400, "Category is required for all order items");
       }
@@ -1062,7 +1059,7 @@ export const updateItem = async (
       category: itemData.category?.trim(),
       remarks: itemData.remarks?.trim(),
       rollType: itemData.rollType?.trim(),
-      rollNumber: itemData.rollNumber?.trim()
+      rollNumber: itemData.rollNumber || null,
     };
     const existingItem = await prisma.orderItem.findUnique({
       where: { id: itemId },
