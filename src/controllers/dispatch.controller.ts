@@ -24,7 +24,7 @@ export const createDispatch = async (
       packageDetails,
       remarks,
     } = req.body;
-
+    
     console.log("Dispatch data:", req.body);
 
     // Validate required fields
