@@ -196,6 +196,7 @@ model Dispatch {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   totalAmount     Float
+  itemDetails     Json
 
   order Order @relation(fields: [orderId], references: [id])
   user  User? @relation(fields: [userId], references: [id])

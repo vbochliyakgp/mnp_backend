@@ -50,9 +50,9 @@ export const createDispatch = async (
       throw new ApiError(404, "Order not found");
     }
 
-    if (order.dispatch) {
-      throw new ApiError(400, "Order already has a dispatch record");
-    }
+    // if (order.dispatch) {
+    //   throw new ApiError(400, "Order already has a dispatch record");
+    // }
 
     // Generate dispatch ID
     const lastDispatch = await prisma.dispatch.findFirst({
@@ -101,6 +101,27 @@ export const createDispatch = async (
           remarks,
           status: "READY_FOR_PICKUP",
           totalAmount,
+          itemDetails: packageDetails.map((item: any) => ({
+            itemName: item.itemName,
+            type: item.type,
+            rollType: item.rollType,
+            rollNumber: item.rollNumber,
+            gsm: item.gsm,
+            colorTop: item.colorTop,
+            colorBottom: item.colorBottom,  
+            length: item.length,
+            width: item.width,
+            weight: item.weight,
+            quantity: item.quantity,
+            deliveredQuantity: item.deliveredQuantity,
+            rate: item.rate,
+            metricValue: item.metricValue,
+            itemId: item.itemId,
+            unit: item.unit,
+            total: (Number(item.rate) || 0) * (Number(item.metricValue) || 0) * (Number(item.deliveredQuantity) || 0),
+            variant: item.variant || null,
+            orderId:item.orderId,
+          })),
         } as any,
         include: {
           order: true,
@@ -123,9 +144,7 @@ export const createDispatch = async (
             await prisma.orderItem.updateMany({
               where: { id: item.itemId },
               data: {
-                quantity: {
-                  decrement: Number(item.deliveredQuantity) || 0,
-                },
+                quantity: Number(item.quantity) - Number(item.deliveredQuantity)
               },
             });
           }
