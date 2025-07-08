@@ -109,7 +109,7 @@ export const getManufacturingDashboard = async (
       orderId: order.orderId,
       total: order.total,
       status: order.status,
-      dispatchStatus: order.dispatch?.status || "NOT_DISPATCHED",
+      dispatchStatus: order.dispatch[0]?.status || "NOT_DISPATCHED",
     }));
 
     // Count completed and pending orders

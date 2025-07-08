@@ -195,7 +195,7 @@ export const createOrder = async (
       return {
         itemName: item.itemName.trim(),
         rollType: item.rollType?.trim(),
-        rollNumber: item.rollNumber ? String(item.rollNumber) : null,
+        rollNumber: item.rollNumber ? parseInt(item.rollNumber) : null,
         category: item.category?.trim(),
         colorTop: item.colorTop?.trim(),
         colorBottom: item.colorBottom?.trim(),
@@ -325,7 +325,6 @@ export const getOrders = async (
               ? order.items.map((item) => item.itemName).join(", ")
               : "No items",
           total: order.total,
-          trackingId: order.dispatch?.trackingId,
           remarks: order.remarks,
           salesPerson: order.salesPerson,
         })),
@@ -394,7 +393,6 @@ export const getOrderBook = async (
         ? order.items.map((item) => item.itemName).join(", ")
         : "No items",
       total: order.total,
-      trackingId: order.dispatch?.trackingId,
       remarks: order.remarks,
       salesPerson: order?.salesPerson,
       deliveryMethod: order?.deliveryMethod,
@@ -700,7 +698,6 @@ export const getDispatchedOrders = async (
       products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
       status: order.status,
-      trackingId: order.dispatch?.trackingId,
     }));
 
     successResponse(
@@ -839,7 +836,6 @@ export const filterOrders = async (
       status: order.status,
       products: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
-      trackingId: order.dispatch?.trackingId,
     }));
 
     successResponse(
@@ -928,7 +924,6 @@ export const filterOrderBook = async (
       status: order.status,
       product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
-      trackingId: order.dispatch?.trackingId,
     }));
 
     successResponse(
@@ -1014,7 +1009,6 @@ export const searchOrders = async (
       status: order.status,
       product: order.items.length > 0 ? "Custom product" : "No items",
       total: order.total,
-      trackingId: order.dispatch?.trackingId,
     }));
 
     successResponse(
@@ -1060,7 +1054,7 @@ export const updateItem = async (
       category: itemData.category?.trim(),
       remarks: itemData.remarks?.trim(),
       rollType: itemData.rollType?.trim(),
-      rollNumber: itemData.rollNumber || null,
+      rollNumber: parseInt(itemData.rollNumber) || null,
       piecesPerBundle: itemData.piecesPerBundle,
     };
     const existingItem = await prisma.orderItem.findUnique({

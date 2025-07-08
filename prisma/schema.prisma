@@ -115,7 +115,6 @@ model Order {
   salesPerson    String?
   deliveryMethod DeliveryMethod?
   carrier        String?
-  trackingId     String?
   transportName  String?
   transportPhone String?
   remarks        String?
@@ -125,7 +124,7 @@ model Order {
 
   customer        Customer?         @relation(fields: [customerId], references: [id])
   items           OrderItem[]
-  dispatch        Dispatch?
+  dispatch        Dispatch[]
   ProductionBatch ProductionBatch[]
 
   @@map("orders")
@@ -149,7 +148,7 @@ model OrderItem {
   total           Float
   variant         String?
   rollType        String?
-  rollNumber      String?
+  rollNumber      Int?
   remarks         String?
   type           ProductType @default(ROLL)
 
@@ -179,7 +178,7 @@ model ProductionBatch {
 model Dispatch {
   id              String         @id @default(cuid())
   dispatchId      String         @unique
-  orderId         String         @unique
+  orderId         String         
   userId          String?
   customer        String
   status          DispatchStatus @default(READY_FOR_PICKUP)
@@ -190,7 +189,6 @@ model Dispatch {
   driverNumber    String?
   carrier         String?
   transportation  String?
-  trackingId      String?
   packageDetails  String?
   remarks         String?
   createdAt       DateTime       @default(now())

@@ -24,7 +24,7 @@ export const createDispatch = async (
       packageDetails,
       remarks,
     } = req.body;
-    
+
     console.log("Dispatch data:", req.body);
 
     // Validate required fields
@@ -107,7 +107,10 @@ export const createDispatch = async (
             metricValue: item.metricValue,
             itemId: item.itemId,
             unit: item.unit,
-            total: (Number(item.rate) || 0) * (Number(item.metricValue) || 0) * (Number(item.deliveredQuantity) || 0),
+            total:
+              (Number(item.rate) || 0) *
+              (Number(item.metricValue) || 0) *
+              (Number(item.deliveredQuantity) || 0),
           })),
         } as any,
         include: {
@@ -124,16 +127,25 @@ export const createDispatch = async (
         },
       });
 
-      // Update order items quantities in parallel
       await Promise.all(
         packageDetails.map(async (item: any) => {
           if (item.itemId && item.deliveredQuantity) {
-            await prisma.orderItem.updateMany({
+            const currentOrderItem = await prisma.orderItem.findUnique({
               where: { id: item.itemId },
-              data: {
-                quantity: Number(item.quantity) - Number(item.deliveredQuantity)
-              },
+              select: { quantity: true },
             });
+
+            if (currentOrderItem) {
+              const newQuantity = Math.max(
+                0,
+                currentOrderItem.quantity - Number(item.deliveredQuantity)
+              );
+
+              await prisma.orderItem.update({
+                where: { id: item.itemId },
+                data: { quantity: newQuantity },
+              });
+            }
           }
         })
       );
@@ -155,7 +167,9 @@ export const createDispatch = async (
           } = item;
 
           // Parse values once
-          const parsedRollNumber = rollNumber ? parseInt(rollNumber) : undefined;
+          const parsedRollNumber = rollNumber
+            ? parseInt(rollNumber)
+            : undefined;
           const parsedGsm = gsm ? parseInt(gsm) : undefined;
           const parsedLength = length ? parseFloat(length) : undefined;
           const parsedWidth = width ? parseFloat(width) : undefined;
@@ -194,7 +208,10 @@ export const createDispatch = async (
           }
 
           if (existingProduct) {
-            const newStock = Math.max(0, existingProduct.stock - parsedQuantity);
+            const newStock = Math.max(
+              0,
+              existingProduct.stock - parsedQuantity
+            );
             await prisma.product.update({
               where: { id: existingProduct.id },
               data: {
@@ -216,7 +233,6 @@ export const createDispatch = async (
     next(error);
   }
 };
-
 
 export const getTodayDispatches = async (
   req: Request,
@@ -315,7 +331,7 @@ export const updateDispatchStatus = async (
 ) => {
   try {
     const { id } = req.params;
-    const { status, trackingId, remarks } = req.body;
+    const { status, remarks } = req.body;
 
     if (
       !status ||
@@ -330,7 +346,6 @@ export const updateDispatchStatus = async (
       where: { id },
       data: {
         status,
-        ...(trackingId && { trackingId }),
         ...(remarks && { remarks }),
       },
     });
@@ -371,7 +386,6 @@ export const searchShipments = async (
         { customer: { contains: query as string, mode: "insensitive" } },
         { driverName: { contains: query as string, mode: "insensitive" } },
         { carNumber: { contains: query as string, mode: "insensitive" } },
-        { trackingId: { contains: query as string, mode: "insensitive" } },
         { shippingAddress: { contains: query as string, mode: "insensitive" } },
       ];
     }
@@ -422,7 +436,6 @@ export const searchShipments = async (
         .join(" "), // Convert READY_FOR_PICKUP to "Ready for pickup"
       date: shipment.createdAt.toISOString().split("T")[0],
       carrier: shipment.carrier,
-      tracking: shipment.trackingId,
     }));
 
     successResponse(
@@ -465,7 +478,6 @@ export const getDeliveredShipments = async (
           },
         },
         { customer: { contains: search as string, mode: "insensitive" } },
-        { trackingId: { contains: search as string, mode: "insensitive" } },
       ];
     }
 
@@ -493,7 +505,6 @@ export const getDeliveredShipments = async (
       status: "Delivered", // Hardcoded since we're filtering by status
       date: shipment.createdAt.toISOString().split("T")[0],
       carrier: shipment.carrier,
-      tracking: shipment.trackingId,
     }));
 
     successResponse(
@@ -536,7 +547,6 @@ export const getInTransitShipments = async (
           },
         },
         { customer: { contains: search as string, mode: "insensitive" } },
-        { trackingId: { contains: search as string, mode: "insensitive" } },
       ];
     }
 
@@ -564,7 +574,6 @@ export const getInTransitShipments = async (
       status: "In Transit", // Hardcoded since we're filtering by status
       date: shipment.createdAt.toISOString().split("T")[0],
       carrier: shipment.carrier,
-      tracking: shipment.trackingId,
     }));
 
     successResponse(
