@@ -552,6 +552,7 @@ export const updateOrderProducts = async (
   try {
     const { id } = req.params;
     const { items } = req.body;
+    console.log(req.body);
 
     if (!items?.length) throw new ApiError(400, "Items array required");
 
@@ -561,6 +562,7 @@ export const updateOrderProducts = async (
       const total = unitPrice * (item.quantity || 1);
 
       return {
+        type: item.type,
         itemName: item.itemName,
         colorTop: item.colorTop,
         colorBottom: item.colorBottom,
@@ -572,7 +574,8 @@ export const updateOrderProducts = async (
         unit: item.unit || "units",
         unitPrice: unitPrice,
         total: total,
-        variant: item.variant,
+        variant:item.customVariant || item.variant,
+        category:item.customCategory || item.category,
         remarks:item.remarks,
         rollType: item.rollType,
         rollNumber: item.rollNumber

@@ -63,9 +63,9 @@ export const createDispatch = async (
     const packageDetailsString = packageDetails
       .map((item: any) => {
         if (item.type === "ROLL") {
-          return `${item.itemName || "N/A"}-${item.rollType || "N/A"}-${item.rollNumber || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.width || "N/A"} (Qty: ${item.deliveredQuantity || 0})`;
+          return `${item.itemName || ''} ${item.rollType || ''}_${item.gsm || ''}_${item.colorTop || ''}/${item.colorBottom || ''}_${item.width  || ''}(In) (Qty: ${item.deliveredQuantity || 0})`;
         }
-        return `${item.itemName || "N/A"}-${item.gsm || "N/A"}-${item.colorTop || "N/A"}-${item.colorBottom || "N/A"}-${item.length || "N/A"}-${item.width || "N/A"} (Qty: ${item.deliveredQuantity || 0})`;
+        return `${item.itemName || ''}_${item.gsm || ''}_${item.colorTop || ''}_${item.colorBottom || ''}_${item.length || ''}(ft)X${item.width || ''}(ft) (Qty: ${item.deliveredQuantity || 0})`;
       })
       .join(", ");
 
@@ -100,6 +100,7 @@ export const createDispatch = async (
             totalAmount,
             itemDetails: packageDetails.map((item: any) => ({
               deliveredQuantity: item.deliveredQuantity,
+              itemName: item.type === "ROLL" ? `${item.itemName || ''} ${item.rollType || ''}_${item.gsm || ''}_${item.colorTop || ''}/${item.colorBottom || ''}_${item.width  || ''}(In) (Qty: ${item.deliveredQuantity || 0})` : `${item.itemName || ''}_${item.gsm || ''}_${item.colorTop || ''}_${item.colorBottom || ''}_${item.length || ''}(ft)X${item.width || ''}(ft) (Qty: ${item.deliveredQuantity || 0})`,
               rate: item.rate,
               metricValue: item.metricValue,
               itemId: item.itemId,
@@ -114,16 +115,8 @@ export const createDispatch = async (
             order: true,
           },
         });
-
-        // Update order status with calculated total
-        await prisma.order.update({
-          where: { id: order.id },
-          data: {
-            status: "SHIPPED",
-            total: order.total + totalAmount,
-          },
-        });
-
+        
+        let flag = true;
         // Update order item quantities
         await Promise.all(
           packageDetails.map(async (item: any) => {
@@ -144,7 +137,9 @@ export const createDispatch = async (
                   );
 
                   console.log(`Updating ${currentOrderItem.itemName}: ${currentOrderItem.quantity} - ${item.deliveredQuantity} = ${newQuantity}`);
-
+                  if(newQuantity !== 0) {
+                    flag = false;
+                  }
                   await prisma.orderItem.update({
                     where: { id: item.id },
                     data: { quantity: newQuantity },
@@ -156,6 +151,17 @@ export const createDispatch = async (
             }
           })
         );
+
+        // Update order status with calculated total
+        if(flag) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: "SHIPPED",
+            total: order.total + totalAmount,
+          },
+        });
+      }
 
         return newDispatch;
       },
@@ -197,9 +203,7 @@ export const createDispatch = async (
             existingProduct = await prisma.product.findFirst({
               where: {
                 name: itemName,
-                type,
                 rollType,
-                rollNumber: parsedRollNumber,
                 gsm: parsedGsm,
                 colorTop,
                 colorBottom,
@@ -210,7 +214,6 @@ export const createDispatch = async (
             existingProduct = await prisma.product.findFirst({
               where: {
                 name: itemName,
-                type,
                 gsm: parsedGsm,
                 colorTop,
                 colorBottom,

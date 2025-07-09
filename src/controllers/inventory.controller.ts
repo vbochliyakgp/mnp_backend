@@ -119,7 +119,7 @@ export const addFinishedProduct = async (
       rollNumber,
     } = req.body;
 
-    if (!type || !name || !quantity) {
+    if (!type || !name || !quantity ) {
       throw new ApiError(400, "Type, name, and quantity are required");
     }
 
@@ -131,9 +131,7 @@ export const addFinishedProduct = async (
       existingProduct = await prisma.product.findFirst({
         where: {
           name,
-          type,
           rollType,
-          rollNumber: rollNumber ? parseInt(rollNumber) : undefined,
           gsm: gsm ? parseInt(gsm) : undefined,
           colorTop,
           colorBottom,
@@ -144,7 +142,6 @@ export const addFinishedProduct = async (
       existingProduct = await prisma.product.findFirst({
         where: {
           name,
-          type,
           gsm: gsm ? parseInt(gsm) : undefined,
           colorTop,
           colorBottom,
