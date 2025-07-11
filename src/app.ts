@@ -22,6 +22,7 @@ import {
   UserRole,
   UserStatus,
 } from "../generated/prisma";
+import { authenticate, requirePageAccess } from "./middlewares/auth";
 
 const prisma = new PrismaClient();
 
@@ -35,13 +36,14 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api/users", userRouter);
-app.use("/api/dashboard", dashboardRouter);
+app.use(authenticate);
+app.use("/api/dashboard", requirePageAccess("dashboard"), dashboardRouter);
 app.use("/api/orders", orderRouter);
-app.use("/api/inventory", inventoryRouter);
+app.use("/api/inventory", requirePageAccess("inventory"), inventoryRouter);
 app.use("/api/products", productRouter);
 app.use("/api/raw-materials", rawMaterialRouter);
 app.use("/api/production", productionRouter);
-app.use("/api/dispatch", dispatchRouter);
+app.use("/api/dispatch", requirePageAccess("dispatch"), dispatchRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/alerts", alertRouter);
 

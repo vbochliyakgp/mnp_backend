@@ -238,50 +238,6 @@ export const updateUser = async (
   }
 };
 
-// Update user's own permissions
-export const updateMyPermissions = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const userId = (req as any).userId;
-    const { pages } = req.body;
-
-    if (!pages) {
-      throw new ApiError(400, "Pages array is required");
-    }
-
-    validatePages(pages);
-
-    const result = await prisma.$transaction(async (prisma) => {
-      // Delete all existing permissions
-      await prisma.userPermission.deleteMany({
-        where: { userId },
-      });
-
-      // Create new permissions
-      if (pages.length > 0) {
-        await prisma.userPermission.createMany({
-          data: pages.map((page: string) => ({
-            userId,
-            page: page,
-          })),
-        });
-      }
-
-      return await prisma.userPermission.findMany({
-        where: { userId },
-        orderBy: { page: 'asc' },
-      });
-    });
-
-    successResponse(res, 200, result, "Permissions updated successfully");
-  } catch (error) {
-    next(error);
-  }
-};
-
 // Get current user's permissions
 export const getMyPermissions = async (
   req: Request,
@@ -462,26 +418,23 @@ export const changePassword = async (
   }
 };
 
-// Get available pages
-export const getAvailablePages = async (
+export const deleteUser = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const result = {
-      availablePages: AVAILABLE_PAGES,
-      pageDescriptions: {
-        dashboard: "Dashboard Overview",
-        orders: "Orders Management",
-        "order-book": "Order Book",
-        inventory: "Inventory Management",
-        dispatch: "Dispatch Management",
-        admin: "Admin Panel"
-      }
-    };
-
-    successResponse(res, 200, result, "Available pages retrieved successfully");
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+    if(!user) {
+      throw new ApiError(404, "User not found");
+    }
+    await prisma.user.delete({
+      where: { id },
+    });
+    successResponse(res, 200, null, "User deleted successfully");
   } catch (error) {
     next(error);
   }

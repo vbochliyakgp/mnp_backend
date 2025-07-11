@@ -17,11 +17,12 @@ import {
   updateItem,
   deleteItem
 } from "../controllers/order.controller";
+import { requirePageAccess } from "../middlewares/auth";
 
 const router = express.Router();
 
 // Standard order routes
-router.post("/", createOrder);
+router.post("/", requirePageAccess("orders"), createOrder);
 router.get("/", getOrders);
 router.get("/book", getOrderBook);
 router.get("/:id", getOrderDetails);
