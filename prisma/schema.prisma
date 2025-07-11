@@ -12,20 +12,29 @@ datasource db {
 }
 
 model User {
-  id        String     @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  email     String     @unique
-  role      UserRole
+  email     String   @unique
+  password  String
   status    UserStatus @default(ACTIVE)
   lastLogin DateTime?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @default(now())
 
-  // Relations
-
-  dispatches Dispatch[]
+  dispatches  Dispatch[]
+  permissions UserPermission[]
 
   @@map("users")
+}
+
+model UserPermission {
+  id     String @id @default(cuid())
+  userId String
+  page   String 
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, page])
+  @@map("user_permissions")
 }
 
 model RawMaterial {
