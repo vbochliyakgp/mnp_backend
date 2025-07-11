@@ -1,4 +1,5 @@
 // middleware/auth.ts
+import { RequestHandler } from "express";
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "../../generated/prisma";
@@ -47,7 +48,7 @@ export const requirePageAccess = (page: string) => {
       const userPages = (req as any).userPages as string[];
 
       if (!userPages || !userPages.includes(page)) {
-        throw new ApiError(403, `Access denied. You need permission to access ${page} page`);
+        return;
       }
 
       next();
@@ -70,4 +71,35 @@ export const requireAdminAccess = (req: Request, res: Response, next: NextFuncti
   } catch (error) {
     next(error);
   }
+};
+
+export const requireEitherPageAccess = (pages: string[]): RequestHandler => {
+  const middlewares = pages.map(page => requirePageAccess(page));
+
+  return async (req: Request, res: Response, next: NextFunction) => {
+    let called = false;
+
+    const nextOnce = () => {
+      if (!called) {
+        called = true;
+        next();
+      }
+    };
+
+    await Promise.all(
+      middlewares.map(
+        (mw) =>
+          new Promise((resolve) =>
+            mw(req, res, () => {
+              nextOnce();
+              resolve(null);
+            })
+          )
+      )
+    );
+
+    if (!called) {
+      return res.status(403).json({ message: "Access Denied" });
+    }
+  };
 };

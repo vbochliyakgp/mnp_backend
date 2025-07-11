@@ -17,36 +17,36 @@ import {
   updateItem,
   deleteItem
 } from "../controllers/order.controller";
-import { requirePageAccess } from "../middlewares/auth";
+import { requirePageAccess, requireEitherPageAccess } from "../middlewares/auth";
 
 const router = express.Router();
 
 // Standard order routes
-router.post("/", requirePageAccess("orders"), createOrder);
-router.get("/", getOrders);
-router.get("/book", getOrderBook);
-router.get("/:id", getOrderDetails);
-router.patch("/:id/status", updateOrderStatus);
-router.patch("/:id/products", updateOrderProducts);
+router.post("/", requireEitherPageAccess(["orders"]), createOrder);
+router.get("/", requireEitherPageAccess(["orders", "order-book"]), getOrders);
+router.get("/book", requireEitherPageAccess(["order-book"]), getOrderBook);
+router.get("/:id", requireEitherPageAccess(["orders", "order-book"]), getOrderDetails);
+router.patch("/:id/status", requireEitherPageAccess(["orders"]), updateOrderStatus);
+router.patch("/:id/products", requireEitherPageAccess(["orders"]), updateOrderProducts);
 
 // Status filtered routes
-router.get("/pending", getPendingOrders);
-router.get("/dispatched", getDispatchedOrders);
-router.get("/cancelled", getCancelledOrders);
+router.get("/pending",requireEitherPageAccess(["orders", "order-book"]), getPendingOrders);
+router.get("/dispatched", requireEitherPageAccess(["orders", "order-book"]), getDispatchedOrders);
+router.get("/cancelled", requireEitherPageAccess(["orders", "order-book"]), getCancelledOrders);
 
 // Filter and search routes
-router.get("/filter", filterOrders);
-router.get("/filter/book", filterOrderBook);
-router.get("/search", searchOrders);
+router.get("/filter", requireEitherPageAccess(["orders", "order-book"]), filterOrders);
+router.get("/filter/book", requireEitherPageAccess(["order-book"]), filterOrderBook);
+router.get("/search", requireEitherPageAccess(["orders", "order-book"]), searchOrders);
 
 // routes for checking name and number
 
-router.get("/customer/:whatsapp", getCustomerByWhatsApp);
-router.get("/customer/check-name/:name", checkCustomerByName);
+router.get("/customer/:whatsapp",requireEitherPageAccess(["orders"]), getCustomerByWhatsApp);
+router.get("/customer/check-name/:name",requireEitherPageAccess(["orders"]), checkCustomerByName);
 
 // update and delete item
-router.patch('/item/:itemId', updateItem);
-router.delete('/item/:itemId', deleteItem);
+router.patch('/item/:itemId',requireEitherPageAccess(["orders"]), updateItem);
+router.delete('/item/:itemId',requireEitherPageAccess(["orders"]), deleteItem);
 
 
 export default router;

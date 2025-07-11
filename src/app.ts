@@ -22,7 +22,7 @@ import {
   UserRole,
   UserStatus,
 } from "../generated/prisma";
-import { authenticate, requirePageAccess } from "./middlewares/auth";
+import { authenticate, requireEitherPageAccess } from "./middlewares/auth";
 
 const prisma = new PrismaClient();
 
@@ -37,13 +37,13 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/api/users", userRouter);
 app.use(authenticate);
-app.use("/api/dashboard", requirePageAccess("dashboard"), dashboardRouter);
+app.use("/api/dashboard", requireEitherPageAccess(["dashboard"]), dashboardRouter);
 app.use("/api/orders", orderRouter);
-app.use("/api/inventory", requirePageAccess("inventory"), inventoryRouter);
-app.use("/api/products", productRouter);
-app.use("/api/raw-materials", rawMaterialRouter);
-app.use("/api/production", productionRouter);
-app.use("/api/dispatch", requirePageAccess("dispatch"), dispatchRouter);
+app.use("/api/inventory", requireEitherPageAccess(["inventory"]), inventoryRouter);//check
+app.use("/api/products",requireEitherPageAccess(["inventory"]), productRouter);
+app.use("/api/raw-materials",requireEitherPageAccess(["inventory"]), rawMaterialRouter);
+app.use("/api/production",requireEitherPageAccess(["inventory"]), productionRouter);// not in use
+app.use("/api/dispatch", requireEitherPageAccess(["dispatch"]), dispatchRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/alerts", alertRouter);
 
