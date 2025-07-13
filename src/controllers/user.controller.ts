@@ -380,10 +380,10 @@ export const changePassword = async (
 ) => {
   try {
     const userId = (req as any).userId;
-    const { currentPassword, newPassword } = req.body;
+    const { newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      throw new ApiError(400, "Current password and new password are required");
+    if (!newPassword) {
+      throw new ApiError(400, "New password is required");
     }
 
     if (newPassword.length < 6) {
@@ -396,12 +396,6 @@ export const changePassword = async (
 
     if (!user) {
       throw new ApiError(404, "User not found");
-    }
-
-    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
-
-    if (!isValidPassword) {
-      throw new ApiError(400, "Current password is incorrect");
     }
 
     const saltRounds = 12;
